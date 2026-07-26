@@ -333,7 +333,7 @@ func _create_hud() -> void:
 	minimap.size = Vector2(190, 190)
 	minimap.configure(player, enemies)
 	hud.add_child(minimap)
-	_add_label(hud, "云津渡", Vector2(1127, 176), Vector2(78, 23), 14, Color("#f0d993"), true)
+	_add_label(minimap, "云津渡", Vector2(57, 160), Vector2(78, 23), 14, Color("#f0d993"), true)
 
 	var quest := _panel(Vector2(958, 218), Vector2(302, 148), Color(0.025, 0.04, 0.035, 0.91))
 	hud.add_child(quest)
@@ -383,7 +383,7 @@ func _create_hud() -> void:
 		menu.add_theme_font_size_override("font_size", 12)
 		menu.pressed.connect(_open_system_panel.bind(menu_names[index]))
 
-	var restart := _button(hud, "重整江湖", Vector2(1163, 427), Vector2(97, 34))
+	var restart := _button(currency, "重整江湖", Vector2(71, 51), Vector2(97, 34))
 	restart.add_theme_font_size_override("font_size", 12)
 	restart.pressed.connect(_restart_game)
 
