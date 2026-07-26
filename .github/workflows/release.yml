@@ -1,4 +1,4 @@
-name: Build and release Windows
+name: Build Godot Windows installer
 
 on:
   workflow_dispatch:
@@ -14,25 +14,60 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.13.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm desktop:win
+
+      - name: Download Godot 4.7.1 and export templates
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tools/godot | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_win64.exe.zip" `
+            -OutFile "tools/godot.zip"
+          Expand-Archive "tools/godot.zip" -DestinationPath "tools/godot"
+
+          Invoke-WebRequest `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz" `
+            -OutFile "tools/export-templates.zip"
+          Expand-Archive "tools/export-templates.zip" -DestinationPath "tools/export-templates"
+          $templateDir = "$env:APPDATA/Godot/export_templates/4.7.1.stable"
+          New-Item -ItemType Directory -Force $templateDir | Out-Null
+          Copy-Item "tools/export-templates/templates/*" $templateDir -Recurse -Force
+
+      - name: Validate Godot project
+        shell: pwsh
+        run: |
+          $godot = Get-ChildItem "tools/godot" -Filter "*console.exe" -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+          & $godot --headless --path godot --editor --quit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Export Windows game
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/windows | Out-Null
+          $godot = Get-ChildItem "tools/godot" -Filter "*console.exe" -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+          & $godot --headless --path godot --export-release `
+            "Windows Desktop" "$PWD/build/windows/LuodongLegendary.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem build/windows
+
+      - name: Create compressed installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=0.4.0" "installer/luodong-legendary.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
-          name: LuodongLegendary-Windows-x64
-          path: release/*.exe
+          name: LuodongLegendary-Windows-x64-Installer
+          path: release/*-setup.exe
           if-no-files-found: error
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: 泺栋传奇 ${{ github.ref_name }}
           generate_release_notes: true
-          files: release/*.exe
+          files: release/*-setup.exe

@@ -1,5 +1,14 @@
 # Third-Party Notices
 
+## Godot Engine
+
+- Source: <https://github.com/godotengine/godot>
+- License: MIT
+- Version used for Windows export: 4.7.1
+- Actual use: v0.4.0 and later Windows clients are exported with the Godot
+  runtime. The complete engine license is included at
+  `godot/ENGINE_LICENSE.txt` and installed under `licenses/GodotEngine.txt`.
+
 ## JevLOMCN/mir1
 
 - Source: <https://github.com/JevLOMCN/mir1>
@@ -23,10 +32,11 @@ The current project is an original Ming-era wuxia game and is not affiliated wit
   `public/assets/atlas/atlas.json`, and `public/assets/atlas/atlas.png`
 - Actual use: the Tiled map and layer structure, tileset, sample character atlas,
   four-direction walking animations, Phaser scene lifecycle, Arcade Physics movement
-  and collision, and camera-follow behavior form the visual foundation of the v0.3.0
-  playable scene. Original Ming-era story, UI, combat, enemies, drops, values, names,
+  and collision, and camera-follow behavior formed the visual foundation of the
+  legacy v0.3.0 Phaser scene. The active v0.4.0 Godot client does not load these
+  sample assets. Original Ming-era story, UI, combat, enemies, drops, values, names,
   and game rules are implemented by this project.
 
 The complete upstream MIT license is retained at
-`src/vendor/phaser-rpg/LICENSE`. The included sample art will be progressively
-replaced by original retro-wuxia art.
+`src/vendor/phaser-rpg/LICENSE`. These files remain only so the historical v0.3.0
+source can still be built and its license obligations remain clear.

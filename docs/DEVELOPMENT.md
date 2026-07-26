@@ -2,45 +2,48 @@
 
 ## 当前进度
 
-项目当前为《泺栋传奇》Windows 单机原型：
+项目当前为《泺栋传奇》Godot Windows 单机原型：
 
-- `WuxiaRaidController`：云津渡剧情选择、确定性招式战斗、碎银和兵器成长。
-- `WuxiaWorldMap`：从 Unlicense 参考项目迁移的通用地图 Cell、实体占位和移动规则。
+- `godot/scenes/main.tscn`：Godot 正式客户端入口。
+- `godot/scripts/main.gd`：鼠标指令、自动追击战斗和网游式 HUD。
+- `godot/scripts/wuxia_actor.gd`：玩家和敌人实体、寻路与角色绘制。
+- `godot/scripts/game_state.gd`：气血、碎银、任务和武学状态。
+- `godot/assets/cloud_ford_2_5d.png`：原创 2.5D 云津渡场景。
+- `installer/luodong-legendary.iss`：可自选安装目录的压缩安装包定义。
+- `WuxiaRaidController` 与 `WuxiaWorldMap`：旧 TypeScript 规则原型。
 - `assets/configs/story-content.json`：主线、副本、支线和随机奇遇的独立内容清单。
-- `src`：不联网的本地试玩页面。
-- `tests/game`：脱离任何引擎的规则测试。
+- `src`：v0.3.0 Phaser 原型，保留作迁移记录，不再作为正式客户端发布。
 
 旧版围猫和动物打宝原型已从首版代码中移除。
 
-## 本地检查
+## 本地运行
 
-需要 Node.js 20+ 与 pnpm：
-
-```bash
-pnpm install
-pnpm check
-```
-
-## 试玩原型
+安装 Godot 4.7.1 后：
 
 ```bash
-pnpm dev
+godot --path godot --editor
 ```
 
-在浏览器打开终端输出的地址（通常为 `http://localhost:5173`）。选择一门武学，在云津渡作出开局决定，再推进三场战斗。当前页面不发起任何网络请求。
+也可以直接启动游戏：
+
+```bash
+godot --path godot
+```
 
 ## Windows 客户端
 
-桌面客户端使用 Electron 封装，存档保存在 Chromium 的本地用户数据目录。运行：
+Godot 命令行导出：
 
 ```bash
-pnpm desktop:dev
+godot --headless --path godot --export-release "Windows Desktop" \
+  build/windows/LuodongLegendary.exe
 ```
 
-生成 Windows x64 portable 文件：
+在 Windows 上使用 Inno Setup 6 生成安装包：
 
 ```bash
-pnpm desktop:win
+iscc /DMyAppVersion=0.4.0 installer/luodong-legendary.iss
 ```
 
-网络功能不在单机 MVP 范围内。
+安装包允许玩家选择安装位置，并使用 LZMA2 固实压缩。网络功能仍不在
+单机 MVP 范围内，但客户端已采用适合继续扩展网游模块的引擎架构。
