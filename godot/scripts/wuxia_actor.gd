@@ -60,7 +60,7 @@ func _physics_process(delta: float) -> void:
 
 func _draw() -> void:
 	# Soft ground shadow and selection ring keep actors readable over the painted map.
-	draw_ellipse(Vector2(0, 17), Vector2(23, 9), Color(0.03, 0.025, 0.02, 0.45))
+	draw_actor_ellipse(Vector2(0, 17), Vector2(23, 9), Color(0.03, 0.025, 0.02, 0.45))
 	if selected:
 		draw_arc(Vector2(0, 16), 27.0, 0.0, TAU, 48, Color("#e7c46a"), 3.0)
 
@@ -91,7 +91,7 @@ func _draw() -> void:
 		)
 
 
-func draw_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
+func draw_actor_ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points := PackedVector2Array()
 	for index in range(32):
 		var angle := TAU * float(index) / 32.0
