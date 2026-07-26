@@ -92,9 +92,10 @@ func _create_enemies() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton):
 		return
-	if event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
-	var click := event.position
+	var click: Vector2 = mouse_event.position
 	for enemy in enemies:
 		if is_instance_valid(enemy) and enemy.global_position.distance_to(click) <= 38.0:
 			_select_enemy(enemy)

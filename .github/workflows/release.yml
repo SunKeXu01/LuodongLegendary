@@ -37,8 +37,15 @@ jobs:
         run: |
           $godot = Get-ChildItem "tools/godot" -Filter "*console.exe" -Recurse |
             Select-Object -First 1 -ExpandProperty FullName
-          & $godot --headless --path godot --editor --quit
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $validationOutput = & $godot --headless --path godot --editor --quit 2>&1 |
+            Out-String
+          Write-Host $validationOutput
+          if (
+            $LASTEXITCODE -ne 0 -or
+            $validationOutput -match "SCRIPT ERROR|Failed to load script|Parse Error"
+          ) {
+            throw "Godot project validation found a script error."
+          }
 
       - name: Export Windows game
         shell: pwsh
@@ -51,11 +58,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem build/windows
 
+      - name: Smoke-test exported Windows game
+        shell: pwsh
+        run: |
+          $gameOutput = & "$PWD/build/windows/LuodongLegendary.exe" `
+            --headless --quit-after 5 2>&1 | Out-String
+          Write-Host $gameOutput
+          if (
+            $LASTEXITCODE -ne 0 -or
+            $gameOutput -match "SCRIPT ERROR|Failed to load script|Parse Error"
+          ) {
+            throw "The exported Windows game failed its startup smoke test."
+          }
+
       - name: Create compressed installer
         shell: pwsh
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            "/DMyAppVersion=0.4.1" "installer/luodong-legendary.iss"
+            "/DMyAppVersion=0.4.2" "installer/luodong-legendary.iss"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
