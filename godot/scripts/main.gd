@@ -1,6 +1,7 @@
 extends Node2D
 
 const Actor = preload("res://scripts/wuxia_actor.gd")
+const Minimap = preload("res://scripts/minimap_widget.gd")
 const BACKGROUND = preload("res://assets/cloud_ford_2_5d.png")
 
 var player: WuxiaActor
@@ -12,11 +13,16 @@ var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
 var health_label: Label
+var inner_power_bar: ProgressBar
+var experience_bar: ProgressBar
 var silver_label: Label
 var quest_count: Label
 var message_label: Label
 var target_label: Label
+var target_health_bar: ProgressBar
 var skill_buttons: Array[Button] = []
+var qinggong_time := 0.0
+var heal_cooldown := 0.0
 
 
 func _ready() -> void:
@@ -126,6 +132,8 @@ func _select_enemy(enemy: WuxiaActor) -> void:
 	player.combat_target = enemy
 	retarget_time = 0.0
 	target_label.text = "目标｜%s  %d/%d" % [enemy.display_name, enemy.health, enemy.max_health]
+	target_health_bar.max_value = enemy.max_health
+	target_health_bar.value = enemy.health
 	GameState.set_message("已锁定%s，少侠将自动接近并施展%s。" % [
 		enemy.display_name, GameState.selected_skill
 	])
@@ -138,12 +146,18 @@ func _clear_target() -> void:
 	selected_enemy = null
 	player.combat_target = null
 	target_label.text = "目标｜尚未选中"
+	target_health_bar.value = 0
 
 
 func _physics_process(delta: float) -> void:
 	marker_time = maxf(0.0, marker_time - delta)
 	retarget_time = maxf(0.0, retarget_time - delta)
 	enemy_attack_time = maxf(0.0, enemy_attack_time - delta)
+	heal_cooldown = maxf(0.0, heal_cooldown - delta)
+	if qinggong_time > 0.0:
+		qinggong_time = maxf(0.0, qinggong_time - delta)
+		if qinggong_time <= 0.0:
+			player.move_speed = 155.0
 	if marker_time > 0.0:
 		queue_redraw()
 	_update_player_combat()
@@ -179,6 +193,7 @@ func _update_player_combat() -> void:
 	target_label.text = "目标｜%s  %d/%d" % [
 		selected_enemy.display_name, selected_enemy.health, selected_enemy.max_health
 	]
+	target_health_bar.value = selected_enemy.health
 	GameState.set_message("%s命中%s，造成 %d 点伤害。" % [
 		GameState.selected_skill, selected_enemy.display_name, damage
 	])
@@ -219,6 +234,7 @@ func _on_enemy_defeated(enemy: WuxiaActor) -> void:
 	GameState.add_silver(12)
 	GameState.set_message("击败%s，获得碎银 12 两。" % name)
 	target_label.text = "目标｜尚未选中"
+	target_health_bar.value = 0
 	if enemies.is_empty():
 		GameState.quest_text = "云津渡伏兵已清剿"
 		GameState.set_message("云津渡重归安宁。新的江湖线索已解锁。")
@@ -256,79 +272,174 @@ func _create_hud() -> void:
 	hud.layer = 50
 	add_child(hud)
 
-	var top_bar := _panel(Vector2(0, 0), Vector2(1280, 72), Color(0.035, 0.04, 0.035, 0.94))
-	hud.add_child(top_bar)
-	_add_label(top_bar, "泺栋传奇", Vector2(28, 12), Vector2(230, 42), 28, Color("#e8d49d"))
-	_add_label(top_bar, "明中叶 · 湖广云津渡", Vector2(238, 25), Vector2(280, 28), 15, Color("#aaa98f"))
-	_add_label(top_bar, "第一回  渡口风波", Vector2(545, 23), Vector2(210, 30), 17, Color("#c7ad78"))
+	var chapter := _panel(Vector2(482, 14), Vector2(316, 40), Color(0.025, 0.035, 0.03, 0.82))
+	hud.add_child(chapter)
+	_add_label(
+		chapter, "明中叶 · 云津渡  |  第一回 渡口风波",
+		Vector2(13, 8), Vector2(290, 25), 14, Color("#dac48c"), true
+	)
 
-	var restart := _button(top_bar, "重新闯荡", Vector2(1145, 16), Vector2(110, 40))
-	restart.pressed.connect(_restart_game)
-
-	var status := _panel(Vector2(20, 90), Vector2(288, 92), Color(0.035, 0.045, 0.04, 0.88))
+	var status := _panel(Vector2(18, 18), Vector2(340, 118), Color(0.025, 0.04, 0.035, 0.91))
 	hud.add_child(status)
-	_add_label(status, "侠", Vector2(16, 17), Vector2(50, 50), 27, Color("#d9c17e"), true)
-	_add_label(status, "青冥门少侠", Vector2(76, 12), Vector2(165, 28), 18, Color("#f0e6c8"))
+	var portrait := _panel(Vector2(12, 16), Vector2(74, 74), Color("#17352d"))
+	status.add_child(portrait)
+	_add_label(portrait, "侠", Vector2(5, 4), Vector2(64, 64), 34, Color("#e5cb82"), true)
+	_add_label(status, "青冥门少侠", Vector2(98, 11), Vector2(150, 25), 18, Color("#f0e6c8"))
+	_add_label(status, "八品 · 青冥门", Vector2(245, 13), Vector2(82, 22), 12, Color("#9fc7ad"), true)
 	health_bar = ProgressBar.new()
-	health_bar.position = Vector2(76, 45)
-	health_bar.size = Vector2(188, 15)
+	health_bar.position = Vector2(98, 41)
+	health_bar.size = Vector2(226, 14)
 	health_bar.show_percentage = false
 	health_bar.max_value = GameState.player_max_health
 	health_bar.add_theme_stylebox_override("background", _style(Color("#211b18"), 3))
 	health_bar.add_theme_stylebox_override("fill", _style(Color("#a84235"), 3))
 	status.add_child(health_bar)
-	health_label = _add_label(status, "", Vector2(76, 62), Vector2(190, 21), 12, Color("#c9c0a8"))
+	health_label = _add_label(status, "", Vector2(101, 40), Vector2(218, 15), 11, Color("#fff0dc"), true)
+	inner_power_bar = ProgressBar.new()
+	inner_power_bar.position = Vector2(98, 60)
+	inner_power_bar.size = Vector2(226, 11)
+	inner_power_bar.show_percentage = false
+	inner_power_bar.max_value = GameState.player_max_inner_power
+	inner_power_bar.add_theme_stylebox_override("background", _style(Color("#111d1b"), 3))
+	inner_power_bar.add_theme_stylebox_override("fill", _style(Color("#367c70"), 3))
+	status.add_child(inner_power_bar)
+	_add_label(status, "内力", Vector2(99, 72), Vector2(40, 17), 11, Color("#87bdb1"))
+	experience_bar = ProgressBar.new()
+	experience_bar.position = Vector2(98, 92)
+	experience_bar.size = Vector2(226, 8)
+	experience_bar.show_percentage = false
+	experience_bar.max_value = 100
+	experience_bar.add_theme_stylebox_override("background", _style(Color("#171713"), 2))
+	experience_bar.add_theme_stylebox_override("fill", _style(Color("#b6954e"), 2))
+	status.add_child(experience_bar)
+	_add_label(status, "境界进度", Vector2(12, 94), Vector2(74, 17), 11, Color("#a9a388"), true)
 
-	var quest := _panel(Vector2(970, 90), Vector2(290, 132), Color(0.035, 0.04, 0.035, 0.9))
-	hud.add_child(quest)
-	_add_label(quest, "当前任务", Vector2(18, 13), Vector2(100, 22), 13, Color("#9e9b82"))
-	_add_label(quest, "云津渡伏兵", Vector2(18, 37), Vector2(190, 27), 20, Color("#ead69a"))
-	_add_label(quest, "点击敌人，自动接近并施展武学。", Vector2(18, 69), Vector2(250, 23), 14, Color("#cec5ac"))
-	quest_count = _add_label(quest, "", Vector2(18, 98), Vector2(230, 23), 15, Color("#d8b45c"))
-
-	var target_panel := _panel(Vector2(470, 84), Vector2(340, 44), Color(0.035, 0.04, 0.035, 0.84))
+	var target_panel := _panel(Vector2(468, 66), Vector2(344, 65), Color(0.025, 0.035, 0.03, 0.88))
 	hud.add_child(target_panel)
 	target_label = _add_label(
-		target_panel, "目标｜尚未选中", Vector2(16, 10), Vector2(310, 28), 15, Color("#e8d9b0")
+		target_panel, "目标｜尚未选中", Vector2(14, 8), Vector2(316, 22), 15, Color("#ead9b1"), true
 	)
+	target_health_bar = ProgressBar.new()
+	target_health_bar.position = Vector2(21, 36)
+	target_health_bar.size = Vector2(302, 13)
+	target_health_bar.show_percentage = false
+	target_health_bar.max_value = 100
+	target_health_bar.add_theme_stylebox_override("background", _style(Color("#211b18"), 3))
+	target_health_bar.add_theme_stylebox_override("fill", _style(Color("#9f3634"), 3))
+	target_panel.add_child(target_health_bar)
 
-	var currency := _panel(Vector2(1090, 234), Vector2(170, 42), Color(0.035, 0.04, 0.035, 0.84))
+	var minimap: MinimapWidget = Minimap.new()
+	minimap.position = Vector2(1070, 16)
+	minimap.size = Vector2(190, 190)
+	minimap.configure(player, enemies)
+	hud.add_child(minimap)
+	_add_label(hud, "云津渡", Vector2(1127, 176), Vector2(78, 23), 14, Color("#f0d993"), true)
+
+	var quest := _panel(Vector2(958, 218), Vector2(302, 148), Color(0.025, 0.04, 0.035, 0.91))
+	hud.add_child(quest)
+	_add_label(quest, "任务追踪", Vector2(15, 11), Vector2(90, 21), 13, Color("#8fa99a"))
+	_add_label(quest, "◆ 云津渡伏兵", Vector2(15, 37), Vector2(190, 25), 18, Color("#ead179"))
+	_add_label(quest, "寒岭武氏暗桩潜伏渡口，清剿伏兵。", Vector2(15, 66), Vector2(270, 22), 13, Color("#d5cbb2"))
+	quest_count = _add_label(quest, "", Vector2(15, 96), Vector2(178, 24), 14, Color("#d8b45c"))
+	var track := _button(quest, "追踪", Vector2(211, 94), Vector2(72, 36))
+	track.tooltip_text = "选择最近的任务目标并自动寻路"
+	track.pressed.connect(_track_quest)
+
+	var currency := _panel(Vector2(1092, 376), Vector2(168, 40), Color(0.025, 0.04, 0.035, 0.86))
 	hud.add_child(currency)
-	silver_label = _add_label(currency, "", Vector2(14, 9), Vector2(145, 25), 15, Color("#e1c268"))
+	silver_label = _add_label(currency, "", Vector2(12, 8), Vector2(144, 24), 14, Color("#e1c268"), true)
 
-	var message_panel := _panel(Vector2(270, 570), Vector2(740, 54), Color(0.035, 0.04, 0.035, 0.88))
-	hud.add_child(message_panel)
-	_add_label(message_panel, "江湖见闻", Vector2(14, 15), Vector2(86, 25), 14, Color("#d1ad67"))
+	var chat_panel := _panel(Vector2(18, 548), Vector2(370, 104), Color(0.02, 0.03, 0.027, 0.88))
+	hud.add_child(chat_panel)
+	_add_label(chat_panel, "附近   系统   江湖", Vector2(13, 7), Vector2(170, 23), 13, Color("#c7ab68"))
 	message_label = _add_label(
-		message_panel, "", Vector2(108, 14), Vector2(615, 28), 14, Color("#eee8d5")
+		chat_panel, "", Vector2(13, 33), Vector2(344, 59), 13, Color("#e4dfcf")
 	)
+	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	var skill_bar := _panel(Vector2(0, 646), Vector2(1280, 74), Color(0.025, 0.03, 0.027, 0.96))
+	var skill_bar := _panel(Vector2(404, 612), Vector2(548, 96), Color(0.02, 0.03, 0.027, 0.94))
 	hud.add_child(skill_bar)
-	_add_label(skill_bar, "鼠标左键：移动 / 选敌", Vector2(24, 25), Vector2(205, 25), 14, Color("#aaa991"))
-	var skill_names := ["青冥剑式", "伏虎掌", "机弩术"]
+	var skill_names := ["青冥剑式", "伏虎掌", "机弩术", "踏燕行", "调息"]
+	var skill_marks := ["剑", "掌", "弩", "轻", "息"]
 	for index in skill_names.size():
 		var button := _button(
-			skill_bar, skill_names[index], Vector2(445 + index * 132, 13), Vector2(120, 48)
+			skill_bar, "%s\n%s" % [skill_marks[index], skill_names[index]],
+			Vector2(13 + index * 106, 10), Vector2(96, 68)
 		)
-		button.pressed.connect(_select_skill.bind(skill_names[index]))
+		button.set_meta("skill_name", skill_names[index])
+		button.tooltip_text = "点击施展%s" % skill_names[index]
+		button.pressed.connect(_activate_skill.bind(skill_names[index]))
 		skill_buttons.append(button)
-	_add_label(skill_bar, "纯鼠标操作 · 自动追击", Vector2(1010, 25), Vector2(230, 25), 14, Color("#aaa991"))
+	_add_label(
+		skill_bar, "左键移动 / 选敌 · 点击武学施放", Vector2(131, 77), Vector2(288, 16),
+		11, Color("#979b8a"), true
+	)
+
+	var system_panel := _panel(Vector2(974, 646), Vector2(286, 62), Color(0.02, 0.03, 0.027, 0.9))
+	hud.add_child(system_panel)
+	var menu_names := ["角色", "背包", "武学", "任务", "社交"]
+	for index in menu_names.size():
+		var menu := _button(system_panel, menu_names[index], Vector2(8 + index * 55, 9), Vector2(51, 44))
+		menu.add_theme_font_size_override("font_size", 12)
+		menu.pressed.connect(_open_system_panel.bind(menu_names[index]))
+
+	var restart := _button(hud, "重整江湖", Vector2(1163, 427), Vector2(97, 34))
+	restart.add_theme_font_size_override("font_size", 12)
+	restart.pressed.connect(_restart_game)
 
 
 func _refresh_hud() -> void:
 	health_bar.value = GameState.player_health
 	health_label.text = "%d / %d" % [GameState.player_health, GameState.player_max_health]
+	inner_power_bar.value = GameState.player_inner_power
+	experience_bar.value = GameState.player_experience
 	silver_label.text = "◆ 碎银  %d" % GameState.silver
-	quest_count.text = "%d 名敌人尚存" % enemies.size()
+	quest_count.text = "%d / 3 名敌人已清剿" % (3 - enemies.size())
 	message_label.text = GameState.message
 	for button in skill_buttons:
-		button.modulate = Color.WHITE if button.text == GameState.selected_skill else Color(0.68, 0.68, 0.62)
+		var skill_name := str(button.get_meta("skill_name"))
+		var selected := skill_name == GameState.selected_skill
+		button.modulate = Color.WHITE if selected else Color(0.72, 0.72, 0.67)
 
 
-func _select_skill(skill_name: String) -> void:
+func _activate_skill(skill_name: String) -> void:
+	if skill_name == "踏燕行":
+		qinggong_time = 5.0
+		player.move_speed = 240.0
+		GameState.set_message("踏燕行已施展：五息之内移动速度提升。")
+		return
+	if skill_name == "调息":
+		if heal_cooldown > 0.0:
+			GameState.set_message("调息尚未恢复，还需 %.1f 息。" % heal_cooldown)
+			return
+		if GameState.player_health >= GameState.player_max_health:
+			GameState.set_message("当前气血充盈，无需调息。")
+			return
+		heal_cooldown = 8.0
+		GameState.heal_player(25)
+		GameState.set_message("运转周天，恢复 25 点气血。")
+		return
 	GameState.selected_skill = skill_name
 	GameState.set_message("已切换为%s，点击敌人即可自动施展。" % skill_name)
+
+
+func _track_quest() -> void:
+	if enemies.is_empty():
+		GameState.set_message("当前任务目标已全部完成。")
+		return
+	var nearest := enemies[0]
+	var nearest_distance := player.global_position.distance_to(nearest.global_position)
+	for enemy in enemies:
+		var distance := player.global_position.distance_to(enemy.global_position)
+		if distance < nearest_distance:
+			nearest = enemy
+			nearest_distance = distance
+	_select_enemy(nearest)
+	GameState.set_message("已追踪%s，正在自动前往任务目标。" % nearest.display_name)
+
+
+func _open_system_panel(panel_name: String) -> void:
+	GameState.set_message("%s系统入口已就位，将在后续版本开放完整内容。" % panel_name)
 
 
 func _restart_game() -> void:

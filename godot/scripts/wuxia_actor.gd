@@ -15,6 +15,7 @@ var combat_target: WuxiaActor
 var attack_cooldown := 0.0
 var destination := Vector2.ZERO
 var agent: NavigationAgent2D
+var nameplate: Label
 
 
 func _ready() -> void:
@@ -25,6 +26,7 @@ func _ready() -> void:
 	agent.radius = 18.0
 	agent.max_speed = move_speed
 	add_child(agent)
+	_create_nameplate()
 	queue_redraw()
 
 
@@ -41,6 +43,7 @@ func stop() -> void:
 
 func take_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
+	_refresh_nameplate()
 	queue_redraw()
 	if health == 0:
 		defeated.emit(self)
@@ -56,6 +59,29 @@ func _physics_process(delta: float) -> void:
 	velocity = direction * move_speed
 	move_and_slide()
 	queue_redraw()
+
+
+func _create_nameplate() -> void:
+	nameplate = Label.new()
+	nameplate.position = Vector2(-66, -70)
+	nameplate.size = Vector2(132, 24)
+	nameplate.text = display_name
+	nameplate.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nameplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	nameplate.add_theme_font_size_override("font_size", 13)
+	nameplate.add_theme_color_override(
+		"font_color", Color("#f0d8bc") if hostile else Color("#d9edcf")
+	)
+	nameplate.add_theme_color_override("font_shadow_color", Color(0.02, 0.02, 0.02, 0.95))
+	nameplate.add_theme_constant_override("shadow_offset_x", 1)
+	nameplate.add_theme_constant_override("shadow_offset_y", 2)
+	add_child(nameplate)
+
+
+func _refresh_nameplate() -> void:
+	if not is_instance_valid(nameplate):
+		return
+	nameplate.text = display_name
 
 
 func _draw() -> void:
