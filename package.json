@@ -1,6 +1,6 @@
 {
   "name": "luodong-legendary",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "《泺栋传奇》明朝武侠 Windows 单机游戏",
   "author": "SunKeXu01",
@@ -60,5 +60,8 @@
       ],
       "artifactName": "LuodongLegendary-${version}-win-${arch}.${ext}"
     }
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
   }
 }

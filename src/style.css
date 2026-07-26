@@ -1,253 +1,328 @@
 :root {
-  color: #382a21;
-  background: radial-gradient(circle at 50% 0, #f0dfbf, #dfc8a4 55%, #b7a184);
-  font-family: 'Songti SC', 'STSong', 'PingFang SC', serif;
+  color: #efe3c6;
+  background: #171813;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-synthesis: none;
 }
+
 * {
   box-sizing: border-box;
 }
 body {
-  min-width: 320px;
-  min-height: 100vh;
+  min-width: 860px;
+  min-height: 620px;
   margin: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% -30%, #514531 0, transparent 55%), #171813;
 }
 button {
+  color: inherit;
   font: inherit;
 }
-.app-shell {
-  width: min(100%, 520px);
-  margin: 0 auto;
-  padding: 25px 18px 40px;
+
+.game-shell {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  grid-template-rows: 76px minmax(0, 1fr) 72px;
+  padding: 10px 14px 12px;
 }
-.topbar,
-.status-row,
-.battle-field,
-.hero-choices {
+.titlebar,
+.choicebar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  border: 1px solid #8d744b66;
+  background: linear-gradient(180deg, #302b22f2, #211f19f2);
+  box-shadow: 0 8px 30px #0008;
 }
-.eyebrow {
-  margin: 0 0 3px;
-  color: #89532d;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
+.titlebar {
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-radius: 12px 12px 0 0;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.seal {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 2px solid #d6a761;
+  background: #812d25;
+  box-shadow: inset 0 0 0 3px #531b18;
+  color: #f4dca7;
+  font-family: 'STKaiti', serif;
+  font-size: 25px;
 }
 h1 {
   margin: 0;
-  font-size: 31px;
+  color: #f3d99e;
+  font-family: 'STKaiti', serif;
+  font-size: 27px;
+  letter-spacing: 5px;
+}
+.brand p {
+  margin: 1px 0 0;
+  color: #9e927d;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.chapter {
+  color: #cbb78e;
+  font-family: 'STKaiti', serif;
+  font-size: 18px;
   letter-spacing: 3px;
 }
-.icon-button {
-  width: 43px;
-  height: 43px;
-  border: 0;
-  border-radius: 50%;
-  background: #e0c49d;
-  color: #673719;
-  font-size: 25px;
-  cursor: pointer;
-}
-.hero-choices {
-  justify-content: flex-start;
-  margin-top: 19px;
-  overflow-x: auto;
-  padding-bottom: 3px;
-}
-.hero-choice {
-  flex: 0 0 auto;
-  padding: 8px 12px;
-  border: 1px solid #c6a77e;
-  border-radius: 99px;
-  background: #fff9ec;
-  color: #684c36;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-}
-.hero-choice span {
-  margin-right: 4px;
-  font-size: 17px;
-}
-.hero-choice.active {
-  border-color: #913f20;
-  background: #ead0a4;
-  color: #652c1c;
-}
-.game-card {
-  margin-top: 17px;
-  padding: 18px;
-  border: 1px solid #cbb08c;
-  border-radius: 27px;
-  background: #fffaf0d9;
-  box-shadow: 0 14px 36px #58341f24;
-}
-#status {
-  font-size: 16px;
-}
-.wallet {
-  padding: 7px 11px;
-  border-radius: 99px;
-  background: #e8cf90;
-  color: #6d431f;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 13px;
-  font-weight: 800;
-}
-.profile {
-  margin: 8px 0 2px;
-  color: #80664f;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 11px;
-  text-align: right;
-}
-.story-choices {
-  display: flex;
-  gap: 8px;
-  margin: 11px 0 14px;
-}
-.story-choice {
-  flex: 1;
-  padding: 9px 7px;
-  border: 1px solid #cdb38b;
-  border-radius: 10px;
-  background: #fff8eb;
-  color: #684931;
+.chapter span {
+  margin-right: 12px;
+  color: #9e4937;
   font-size: 12px;
-  font-weight: 800;
+}
+.restart {
+  padding: 8px 14px;
+  border: 1px solid #8c7049;
+  border-radius: 5px;
+  background: #403629;
   cursor: pointer;
 }
-.story-choice.active {
-  border-color: #983f20;
-  background: #ead0a4;
-  color: #632c1b;
-}
-.story-choice:disabled {
-  cursor: default;
-  opacity: 0.78;
-}
-.stage {
-  margin: 15px 0 7px;
-  color: #6c543e;
-  font-size: 14px;
-  font-weight: 800;
-  text-align: center;
-}
-.battle-field {
-  min-height: 174px;
-  justify-content: space-around;
-  padding: 8px 8px 16px;
-  border-radius: 21px;
-  background: linear-gradient(145deg, #d7b98e, #f0dfc1);
-}
-.fighter {
-  display: grid;
-  width: 43%;
-  place-items: center;
-  text-align: center;
-}
-.fighter-icon {
-  filter: drop-shadow(0 5px 2px #5e382335);
-  font-size: 70px;
-  line-height: 1.1;
-}
-.versus {
-  color: #91401f;
-  font-size: 16px;
-  font-weight: 1000;
-  font-style: italic;
-}
-.health {
+.viewport {
   position: relative;
-  width: 100%;
-  height: 21px;
+  min-height: 0;
   overflow: hidden;
-  border: 2px solid #644433;
-  border-radius: 99px;
-  background: #dfcec0;
-  color: #fff;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 17px;
-  text-shadow: 0 1px 2px #402319;
-  isolation: isolate;
+  border-right: 1px solid #8d744b66;
+  border-left: 1px solid #8d744b66;
+  background: #273629;
 }
-.health::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--health);
-  background: linear-gradient(90deg, #4a8d59, #86b965);
-  content: '';
-  transition: width 0.2s ease;
-}
-.health.enemy::before {
-  background: linear-gradient(90deg, #a94432, #cf7941);
-}
-.health::after {
+.viewport::after {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 4;
+  border: 9px solid transparent;
+  box-shadow: inset 0 0 75px #0d100bdd;
   content: '';
+  pointer-events: none;
 }
-.loot {
-  min-height: 43px;
-  margin: 15px 0 14px;
-  padding: 10px;
-  border: 1px dashed #c8ae87;
-  border-radius: 13px;
-  color: #705844;
-  font-size: 13px;
-  text-align: center;
+.game-canvas,
+.game-canvas canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
-.loot.fine {
-  border-color: #965027;
-  color: #70361f;
-  background: #f0d9af;
+.game-canvas canvas {
+  display: block;
+  object-fit: contain;
 }
-.equipment {
-  margin: -5px 0 14px;
-  color: #664934;
-  font-size: 13px;
-  font-weight: 800;
-  text-align: center;
+.hud,
+.quest-panel,
+.currency,
+.message-box,
+.controls {
+  position: absolute;
+  z-index: 6;
+  border: 1px solid #bea76e55;
+  background: #1d1d18dd;
+  box-shadow: 0 4px 16px #0009;
+  backdrop-filter: blur(5px);
 }
-.attack-button {
-  width: 100%;
-  padding: 15px;
-  border: 0;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #aa6238, #71371f);
-  box-shadow: 0 5px 0 #502617;
-  color: #fff;
+.top-left {
+  top: 16px;
+  left: 18px;
+  display: flex;
+  min-width: 260px;
+  padding: 9px 12px;
+  gap: 10px;
+}
+.portrait {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 2px solid #bf9858;
+  border-radius: 50%;
+  background: #294f66;
+  color: #f6dda6;
+  font-family: 'STKaiti', serif;
+  font-size: 23px;
+}
+.vitals {
+  flex: 1;
+}
+.vitals strong {
+  color: #ead6a7;
+  font-family: 'STKaiti', serif;
+  letter-spacing: 2px;
+}
+.health {
+  height: 12px;
+  margin-top: 7px;
+  overflow: hidden;
+  border: 1px solid #20140f;
+  background: #3b2923;
+}
+.health span {
+  display: block;
+  width: var(--health, 100%);
+  height: 100%;
+  background: linear-gradient(90deg, #8b241f, #cf5b3c);
+  transition: width 0.2s;
+}
+.vitals small {
+  display: block;
+  margin-top: 2px;
+  color: #a99b85;
+  font-size: 10px;
+  text-align: right;
+}
+.quest-panel {
+  top: 16px;
+  right: 18px;
+  width: 235px;
+  padding: 13px 15px;
+  border-left: 3px solid #a14532;
+}
+.quest-panel .label {
+  margin: 0;
+  color: #a08c6a;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.quest-panel h2 {
+  margin: 4px 0;
+  color: #ecd399;
+  font-family: 'STKaiti', serif;
   font-size: 19px;
-  font-weight: 1000;
+}
+.quest-panel p {
+  margin: 0;
+  color: #bdb198;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.quest-count {
+  margin-top: 8px;
+  color: #d5a35f;
+  font-size: 11px;
+}
+.quest-count span {
+  font-size: 16px;
+  font-weight: 800;
+}
+.currency {
+  top: 125px;
+  right: 18px;
+  padding: 7px 12px;
+  color: #cfbd95;
+  font-size: 12px;
+}
+.currency span,
+.currency strong {
+  color: #e2b95e;
+}
+.message-box {
+  bottom: 18px;
+  left: 50%;
+  width: min(540px, 55vw);
+  min-height: 58px;
+  padding: 10px 16px 9px 92px;
+  transform: translateX(-50%);
+}
+.speaker {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: grid;
+  width: 78px;
+  place-items: center;
+  background: #7b3328;
+  color: #f0d7a3;
+  font-family: 'STKaiti', serif;
+}
+.message-box p {
+  margin: 0;
+  color: #ded1b6;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.controls {
+  bottom: 18px;
+  left: 18px;
+  display: flex;
+  padding: 7px 9px;
+  gap: 10px;
+  color: #aaa087;
+  font-size: 10px;
+}
+kbd {
+  padding: 2px 4px;
+  border: 1px solid #76634a;
+  border-radius: 3px;
+  background: #342e24;
+  color: #dec99b;
+}
+.attack {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  z-index: 8;
+  display: grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  border: 2px solid #d1a25c;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, #b54c35, #64231d 70%);
+  box-shadow:
+    0 0 0 6px #251b16cc,
+    0 8px 20px #000b;
   cursor: pointer;
+  font-size: 10px;
 }
-.attack-button:active {
-  transform: translateY(3px);
-  box-shadow: 0 2px 0 #502617;
+.attack span {
+  margin-bottom: -14px;
+  font-family: 'STKaiti', serif;
+  font-size: 30px;
 }
-.attack-button:disabled {
-  cursor: default;
+.attack:active {
+  transform: scale(0.94);
+}
+.attack:disabled {
+  filter: grayscale(1);
   opacity: 0.65;
 }
-.hint,
-.prototype-note {
-  color: #705d4d;
-  font-family: 'PingFang SC', sans-serif;
-  font-size: 13px;
-  line-height: 1.6;
-  text-align: center;
+.choicebar {
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 0 0 12px 12px;
 }
-.hint {
-  min-height: 23px;
-  margin: 16px 2px 0;
+.choice-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.prototype-note {
-  margin: 20px 6px 0;
+.choice-group > span {
+  margin-right: 5px;
+  color: #8f836f;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.choice {
+  padding: 8px 13px;
+  border: 1px solid #655642;
+  border-radius: 3px;
+  background: #2a2821;
+  color: #bdb096;
+  cursor: pointer;
+  font-size: 12px;
+}
+.choice.active {
+  border-color: #c39a58;
+  background: #6e3429;
+  color: #f0d9a6;
+}
+@media (max-width: 980px) {
+  .story,
+  .controls {
+    display: none;
+  }
 }
