@@ -15,9 +15,18 @@ The current project is an original Ming-era wuxia game and is not affiliated wit
 - Source: <https://github.com/remarkablegames/phaser-rpg>
 - License: MIT
 - Source commit: `46d12970317baf0875e646efced1eeca59471c0b`
-- Files studied: `src/scenes/Main.tsx`, `src/sprites/Player.ts`, `src/scenes/Boot.ts`
-- Actual use: the Phaser scene lifecycle, Arcade Physics movement and collision,
-  camera-follow behavior, and map-oriented project structure informed the playable
-  Windows scene.
+- Source files ported: `src/scenes/Main.tsx`, `src/sprites/Player.ts`,
+  `src/scenes/Boot.ts`
+- Assets included and renamed for integration:
+  `public/assets/tilemaps/tuxemon-town.json`,
+  `public/assets/tilesets/tuxemon-sample-32px-extruded.png`,
+  `public/assets/atlas/atlas.json`, and `public/assets/atlas/atlas.png`
+- Actual use: the Tiled map and layer structure, tileset, sample character atlas,
+  four-direction walking animations, Phaser scene lifecycle, Arcade Physics movement
+  and collision, and camera-follow behavior form the visual foundation of the v0.3.0
+  playable scene. Original Ming-era story, UI, combat, enemies, drops, values, names,
+  and game rules are implemented by this project.
 
-No sample characters, maps, tilesets, names, story, audio, or other art assets were copied.
+The complete upstream MIT license is retained at
+`src/vendor/phaser-rpg/LICENSE`. The included sample art will be progressively
+replaced by original retro-wuxia art.
