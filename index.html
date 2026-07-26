@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fff6e9" />
+    <title>泺栋传奇 · 单机试玩原型</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LUODONG LEGENDARY · 明中叶江湖</p>
+          <h1>泺栋传奇</h1>
+        </div>
+        <button id="restart" class="icon-button" type="button" aria-label="重新开始">↻</button>
+      </header>
+
+      <nav id="style-choices" class="hero-choices" aria-label="选择武学路数"></nav>
+
+      <section class="game-card" aria-live="polite">
+        <div class="status-row">
+          <strong id="status">云津渡风波</strong>
+          <span id="coins" class="wallet">碎银 0</span>
+        </div>
+        <p id="profile" class="profile">离线存档 · 最远第 1 章 · 尚无珍藏兵器</p>
+        <nav id="story-choices" class="story-choices" aria-label="云津渡抉择"></nav>
+        <p id="stage" class="stage"></p>
+        <div class="battle-field" aria-label="首领战斗">
+          <div class="fighter">
+            <span id="hero" class="fighter-icon">🐱</span>
+            <div id="hero-health" class="health"></div>
+          </div>
+          <span class="versus">VS</span>
+          <div class="fighter">
+            <span id="enemy" class="fighter-icon">🦝</span>
+            <div id="enemy-health" class="health enemy"></div>
+          </div>
+        </div>
+        <p id="loot" class="loot">先决定如何介入云津渡纷争，再踏入江湖。</p>
+        <p id="equipment" class="equipment">当前攻势 18 · 尚无趁手兵器</p>
+        <button id="attack" class="attack-button" type="button">先作决断</button>
+        <p id="hint" class="hint">每次出招后，对方都会寻隙反击。</p>
+      </section>
+      <p class="prototype-note">原创明朝武侠单机原型：剧情抉择、招式战斗、兵器掉落与副本推进。</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

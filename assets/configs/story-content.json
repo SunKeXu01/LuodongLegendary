@@ -1,0 +1,48 @@
+{
+  "main": [
+    {
+      "id": "prologue",
+      "title": "离乡问道",
+      "summary": "少年离家游历，在各路江湖客的指点下投身青冥门。"
+    },
+    {
+      "id": "cloud-ford",
+      "title": "云津渡风波",
+      "summary": "两县大族争夺渡口商埠，玩家需在调停、取证与护民之间作出选择。"
+    },
+    {
+      "id": "hanling-plot",
+      "title": "寒岭暗局",
+      "summary": "掳人、陷阱与旧怨接连浮现，武氏庄的秘密逐渐暴露。"
+    },
+    {
+      "id": "old-debt",
+      "title": "旧债新裁",
+      "summary": "以江湖规矩、官府公断或武力终结云津渡积怨。"
+    }
+  ],
+  "dungeons": [
+    {
+      "id": "silent-temple",
+      "title": "寂音禅院",
+      "features": ["潜入", "机关", "地牢探索", "多结局"]
+    },
+    {
+      "id": "hanling-escape",
+      "title": "寒岭武庄突围",
+      "features": ["连续守关", "夜间潜行", "营救同伴"]
+    }
+  ],
+  "sideStories": [
+    { "id": "broken-oath", "title": "断义旧案", "theme": "结义、仕途与真相" },
+    { "id": "lone-sword", "title": "孤剑客的旧伤", "theme": "复仇、师承与抉择" },
+    { "id": "missing-silver", "title": "失镖疑云", "theme": "镖局、栽赃与第三方挑拨" }
+  ],
+  "encounters": [
+    { "id": "beggar-master", "title": "街边高人", "theme": "谜题与指点" },
+    { "id": "night-river", "title": "云水夜盗", "theme": "商船、水匪与谈判" },
+    { "id": "market-ring", "title": "乡集擂台", "theme": "比武与赌局" },
+    { "id": "herb-hunt", "title": "山药救亲", "theme": "采药与秘闻" },
+    { "id": "temple-dispute", "title": "道观风波", "theme": "师徒与秘传" }
+  ]
+}

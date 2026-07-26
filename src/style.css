@@ -1,0 +1,253 @@
+:root {
+  color: #382a21;
+  background: radial-gradient(circle at 50% 0, #f0dfbf, #dfc8a4 55%, #b7a184);
+  font-family: 'Songti SC', 'STSong', 'PingFang SC', serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+button {
+  font: inherit;
+}
+.app-shell {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: 25px 18px 40px;
+}
+.topbar,
+.status-row,
+.battle-field,
+.hero-choices {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.eyebrow {
+  margin: 0 0 3px;
+  color: #89532d;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+h1 {
+  margin: 0;
+  font-size: 31px;
+  letter-spacing: 3px;
+}
+.icon-button {
+  width: 43px;
+  height: 43px;
+  border: 0;
+  border-radius: 50%;
+  background: #e0c49d;
+  color: #673719;
+  font-size: 25px;
+  cursor: pointer;
+}
+.hero-choices {
+  justify-content: flex-start;
+  margin-top: 19px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+.hero-choice {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid #c6a77e;
+  border-radius: 99px;
+  background: #fff9ec;
+  color: #684c36;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.hero-choice span {
+  margin-right: 4px;
+  font-size: 17px;
+}
+.hero-choice.active {
+  border-color: #913f20;
+  background: #ead0a4;
+  color: #652c1c;
+}
+.game-card {
+  margin-top: 17px;
+  padding: 18px;
+  border: 1px solid #cbb08c;
+  border-radius: 27px;
+  background: #fffaf0d9;
+  box-shadow: 0 14px 36px #58341f24;
+}
+#status {
+  font-size: 16px;
+}
+.wallet {
+  padding: 7px 11px;
+  border-radius: 99px;
+  background: #e8cf90;
+  color: #6d431f;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+}
+.profile {
+  margin: 8px 0 2px;
+  color: #80664f;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 11px;
+  text-align: right;
+}
+.story-choices {
+  display: flex;
+  gap: 8px;
+  margin: 11px 0 14px;
+}
+.story-choice {
+  flex: 1;
+  padding: 9px 7px;
+  border: 1px solid #cdb38b;
+  border-radius: 10px;
+  background: #fff8eb;
+  color: #684931;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.story-choice.active {
+  border-color: #983f20;
+  background: #ead0a4;
+  color: #632c1b;
+}
+.story-choice:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+.stage {
+  margin: 15px 0 7px;
+  color: #6c543e;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+.battle-field {
+  min-height: 174px;
+  justify-content: space-around;
+  padding: 8px 8px 16px;
+  border-radius: 21px;
+  background: linear-gradient(145deg, #d7b98e, #f0dfc1);
+}
+.fighter {
+  display: grid;
+  width: 43%;
+  place-items: center;
+  text-align: center;
+}
+.fighter-icon {
+  filter: drop-shadow(0 5px 2px #5e382335);
+  font-size: 70px;
+  line-height: 1.1;
+}
+.versus {
+  color: #91401f;
+  font-size: 16px;
+  font-weight: 1000;
+  font-style: italic;
+}
+.health {
+  position: relative;
+  width: 100%;
+  height: 21px;
+  overflow: hidden;
+  border: 2px solid #644433;
+  border-radius: 99px;
+  background: #dfcec0;
+  color: #fff;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 17px;
+  text-shadow: 0 1px 2px #402319;
+  isolation: isolate;
+}
+.health::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--health);
+  background: linear-gradient(90deg, #4a8d59, #86b965);
+  content: '';
+  transition: width 0.2s ease;
+}
+.health.enemy::before {
+  background: linear-gradient(90deg, #a94432, #cf7941);
+}
+.health::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: '';
+}
+.loot {
+  min-height: 43px;
+  margin: 15px 0 14px;
+  padding: 10px;
+  border: 1px dashed #c8ae87;
+  border-radius: 13px;
+  color: #705844;
+  font-size: 13px;
+  text-align: center;
+}
+.loot.fine {
+  border-color: #965027;
+  color: #70361f;
+  background: #f0d9af;
+}
+.equipment {
+  margin: -5px 0 14px;
+  color: #664934;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+.attack-button {
+  width: 100%;
+  padding: 15px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #aa6238, #71371f);
+  box-shadow: 0 5px 0 #502617;
+  color: #fff;
+  font-size: 19px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+.attack-button:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #502617;
+}
+.attack-button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+.hint,
+.prototype-note {
+  color: #705d4d;
+  font-family: 'PingFang SC', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+.hint {
+  min-height: 23px;
+  margin: 16px 2px 0;
+}
+.prototype-note {
+  margin: 20px 6px 0;
+}
