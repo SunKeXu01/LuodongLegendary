@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+dist/
+release/
+temp/
+library/
+local/
+build/
+profiles/
+*.log
+.DS_Store
