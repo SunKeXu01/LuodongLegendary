@@ -54,6 +54,21 @@ jobs:
             throw "Godot project validation found a script error."
           }
 
+      - name: Run gameplay state smoke tests
+        shell: pwsh
+        run: |
+          $godot = Get-ChildItem "tools/godot" -Filter "*console.exe" -Recurse |
+            Select-Object -First 1 -ExpandProperty FullName
+          $testOutput = & $godot --headless --path godot `
+            res://tests/game_state_smoke.tscn 2>&1 | Out-String
+          Write-Host $testOutput
+          if (
+            $LASTEXITCODE -ne 0 -or
+            $testOutput -notmatch "GAMEPLAY STATE SMOKE TEST PASSED"
+          ) {
+            throw "Gameplay state smoke tests failed."
+          }
+
       - name: Export Windows game
         shell: pwsh
         run: |
