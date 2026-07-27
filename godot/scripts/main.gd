@@ -2,7 +2,7 @@ extends Node2D
 
 const Actor = preload("res://scripts/wuxia_actor.gd")
 const Minimap = preload("res://scripts/minimap_widget.gd")
-const World3D = preload("res://scripts/cloud_ford_world_3d.gd")
+const CloudFordWorld = preload("res://scripts/cloud_ford_world_3d.gd")
 
 var player: WuxiaActor
 var enemies: Array[WuxiaActor] = []
@@ -37,7 +37,7 @@ func _ready() -> void:
 
 
 func _create_background() -> void:
-	var background: CloudFordWorld3D = World3D.new()
+	var background: CloudFordWorld3D = CloudFordWorld.new()
 	add_child(background)
 
 	var shade := ColorRect.new()
