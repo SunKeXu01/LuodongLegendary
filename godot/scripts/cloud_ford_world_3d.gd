@@ -1,0 +1,190 @@
+class_name CloudFordWorld3D
+extends SubViewportContainer
+
+var world_viewport: SubViewport
+var world_root: Node3D
+
+
+func _ready() -> void:
+	position = Vector2.ZERO
+	size = Vector2(1280, 720)
+	stretch = true
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	z_index = -100
+	_create_viewport()
+	_create_environment()
+	_create_landscape()
+	_create_settlement()
+	_create_nature()
+
+
+func _create_viewport() -> void:
+	world_viewport = SubViewport.new()
+	world_viewport.size = Vector2i(1280, 720)
+	world_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	world_viewport.msaa_3d = Viewport.MSAA_4X
+	add_child(world_viewport)
+
+	world_root = Node3D.new()
+	world_viewport.add_child(world_root)
+
+	var camera := Camera3D.new()
+	camera.position = Vector3(0.0, 15.5, 18.5)
+	camera.fov = 43.0
+	camera.look_at_from_position(camera.position, Vector3(0.2, 0.0, -2.0))
+	world_root.add_child(camera)
+
+
+func _create_environment() -> void:
+	var world_environment := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("#9aab98")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("#d7d1b8")
+	environment.ambient_light_energy = 0.62
+	environment.fog_enabled = true
+	environment.fog_light_color = Color("#aeb8a4")
+	environment.fog_density = 0.018
+	environment.fog_height = 2.0
+	environment.fog_height_density = 0.12
+	world_environment.environment = environment
+	world_root.add_child(world_environment)
+
+	var sunlight := DirectionalLight3D.new()
+	sunlight.rotation_degrees = Vector3(-54.0, -32.0, 0.0)
+	sunlight.light_color = Color("#f3d8a3")
+	sunlight.light_energy = 1.25
+	sunlight.shadow_enabled = true
+	world_root.add_child(sunlight)
+
+
+func _create_landscape() -> void:
+	_box("渡口地面", Vector3(0, -0.35, -1), Vector3(26, 0.7, 17), Color("#667558"))
+	_box("商道路面", Vector3(-1.0, 0.02, -1.2), Vector3(5.0, 0.08, 17), Color("#8f8062"))
+	_box("河道", Vector3(8.7, -0.05, -1.0), Vector3(7.6, 0.18, 17.0), Color("#477b82"), 0.18)
+
+	for index in range(9):
+		_box(
+			"桥板%d" % index,
+			Vector3(5.5 + index * 0.82, 0.34, 1.0),
+			Vector3(0.74, 0.16, 2.5),
+			Color("#745538")
+		)
+	_box("桥栏左", Vector3(8.7, 0.82, -0.15), Vector3(7.5, 0.12, 0.12), Color("#4d382a"))
+	_box("桥栏右", Vector3(8.7, 0.82, 2.15), Vector3(7.5, 0.12, 0.12), Color("#4d382a"))
+
+	for index in range(6):
+		_box(
+			"远山%d" % index,
+			Vector3(-12.0 + index * 5.0, 2.1 + index % 2, -10.5),
+			Vector3(6.0, 4.5 + index % 2, 3.0),
+			Color("#4c5f4e")
+		)
+
+
+func _create_settlement() -> void:
+	_house(Vector3(-8.5, 0.0, -5.7), Vector3(4.1, 2.8, 3.0), Color("#aa9a75"))
+	_house(Vector3(-3.1, 0.0, -6.1), Vector3(3.8, 2.5, 2.8), Color("#988667"))
+	_house(Vector3(3.2, 0.0, -5.8), Vector3(4.4, 3.1, 3.1), Color("#b4a17a"))
+	_house(Vector3(-9.5, 0.0, 4.9), Vector3(3.8, 2.6, 2.9), Color("#9f8c69"))
+
+	_box("牌坊横梁", Vector3(-0.6, 3.0, -3.8), Vector3(4.2, 0.35, 0.4), Color("#4c3025"))
+	_box("牌坊左柱", Vector3(-2.25, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
+	_box("牌坊右柱", Vector3(1.05, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
+
+	for index in range(5):
+		_box(
+			"摊位%d" % index,
+			Vector3(-6.5 + index * 2.4, 0.55, 1.8 + (index % 2) * 1.4),
+			Vector3(1.4, 1.1, 0.9),
+			Color("#77664b")
+		)
+
+
+func _create_nature() -> void:
+	var tree_positions := [
+		Vector3(-11.0, 0.0, -1.5), Vector3(-7.0, 0.0, -3.2),
+		Vector3(4.3, 0.0, -3.7), Vector3(-11.2, 0.0, 6.2),
+		Vector3(3.8, 0.0, 5.8), Vector3(5.0, 0.0, 3.8)
+	]
+	for index in tree_positions.size():
+		var at: Vector3 = tree_positions[index]
+		_cylinder("树干%d" % index, at + Vector3(0, 1.05, 0), 0.22, 2.1, Color("#58422f"))
+		_sphere("树冠%d" % index, at + Vector3(0, 2.65, 0), 1.35, Color("#3e6748"))
+		_sphere("树冠侧%d" % index, at + Vector3(0.75, 2.35, 0.1), 0.85, Color("#527657"))
+
+
+func _house(at: Vector3, dimensions: Vector3, wall_color: Color) -> void:
+	_box("屋身", at + Vector3(0, dimensions.y * 0.5, 0), dimensions, wall_color)
+	_box(
+		"屋顶",
+		at + Vector3(0, dimensions.y + 0.35, 0),
+		Vector3(dimensions.x + 0.7, 0.42, dimensions.z + 0.75),
+		Color("#293b36")
+	)
+	_box(
+		"门",
+		at + Vector3(0, 0.85, dimensions.z * 0.505),
+		Vector3(0.75, 1.7, 0.08),
+		Color("#4b3026")
+	)
+
+
+func _box(
+	node_name: String,
+	at: Vector3,
+	dimensions: Vector3,
+	color: Color,
+	metallic := 0.0
+) -> MeshInstance3D:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.position = at
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	mesh.material = _material(color, metallic, 0.78)
+	mesh_instance.mesh = mesh
+	world_root.add_child(mesh_instance)
+	return mesh_instance
+
+
+func _cylinder(
+	node_name: String,
+	at: Vector3,
+	radius: float,
+	height: float,
+	color: Color
+) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.position = at
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius * 0.8
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mesh.material = _material(color, 0.0, 0.9)
+	mesh_instance.mesh = mesh
+	world_root.add_child(mesh_instance)
+
+
+func _sphere(node_name: String, at: Vector3, radius: float, color: Color) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.position = at
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	mesh.radial_segments = 16
+	mesh.rings = 8
+	mesh.material = _material(color, 0.0, 0.95)
+	mesh_instance.mesh = mesh
+	world_root.add_child(mesh_instance)
+
+
+func _material(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.metallic = metallic
+	material.roughness = roughness
+	return material

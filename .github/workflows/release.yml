@@ -15,22 +15,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Godot 4.7.1 and export templates
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download Godot 4.7.1 .NET and export templates
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force tools/godot | Out-Null
           Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_win64.exe.zip" `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_win64.zip" `
             -OutFile "tools/godot.zip"
           Expand-Archive "tools/godot.zip" -DestinationPath "tools/godot"
 
           Invoke-WebRequest `
-            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz" `
+            -Uri "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_export_templates.tpz" `
             -OutFile "tools/export-templates.zip"
           Expand-Archive "tools/export-templates.zip" -DestinationPath "tools/export-templates"
           $templateDir = "$env:APPDATA/Godot/export_templates/4.7.1.stable"
           New-Item -ItemType Directory -Force $templateDir | Out-Null
           Copy-Item "tools/export-templates/templates/*" $templateDir -Recurse -Force
+
+      - name: Build C# gameplay core
+        run: dotnet build godot/LuodongLegendary.csproj --configuration Release
 
       - name: Validate Godot project
         shell: pwsh

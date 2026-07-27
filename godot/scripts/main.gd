@@ -2,7 +2,7 @@ extends Node2D
 
 const Actor = preload("res://scripts/wuxia_actor.gd")
 const Minimap = preload("res://scripts/minimap_widget.gd")
-const BACKGROUND = preload("res://assets/cloud_ford_2_5d.png")
+const World3D = preload("res://scripts/cloud_ford_world_3d.gd")
 
 var player: WuxiaActor
 var enemies: Array[WuxiaActor] = []
@@ -37,18 +37,11 @@ func _ready() -> void:
 
 
 func _create_background() -> void:
-	var background := TextureRect.new()
-	background.texture = BACKGROUND
-	background.position = Vector2.ZERO
-	background.size = Vector2(1280, 720)
-	background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.z_index = -100
+	var background: CloudFordWorld3D = World3D.new()
 	add_child(background)
 
 	var shade := ColorRect.new()
-	shade.color = Color(0.04, 0.045, 0.035, 0.12)
+	shade.color = Color(0.025, 0.035, 0.03, 0.08)
 	shade.size = Vector2(1280, 720)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shade.z_index = -90

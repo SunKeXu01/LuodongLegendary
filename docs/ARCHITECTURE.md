@@ -22,8 +22,11 @@ Godot 4.7.1，不再依赖浏览器或 Electron 运行。
 
 ```text
 Godot 4.7.1
+  ├─ C# Gameplay Core
+  │   ├─ PlayerCommand 玩家意图边界
+  │   └─ CombatRules 确定性战斗规则
   ├─ Main 场景
-  │   ├─ 原创 2.5D 云津渡背景
+  │   ├─ 实时渲染 3D 云津渡背景
   │   ├─ NavigationRegion2D 可行走区域
   │   └─ CanvasLayer 网游式 HUD
   ├─ WuxiaActor
