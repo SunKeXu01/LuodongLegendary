@@ -41,6 +41,13 @@ var location_label: Label
 var chapter_label: Label
 var current_zone := "cloud_ford"
 var dungeon_hazard_cooldown := 0.0
+var boss_phase := 0
+var boss_skill_cooldown := 3.0
+var boss_telegraph_time := 0.0
+var boss_telegraph_total := 0.0
+var boss_telegraph_radius := 0.0
+var boss_telegraph_origin := Vector3.ZERO
+var boss_telegraph: MeshInstance3D
 
 
 func _ready() -> void:
@@ -126,8 +133,8 @@ func _followup_enemy_specs() -> Array:
 
 func _temple_guard_specs() -> Array:
 	return [
-		["巡夜武僧", Vector3(-3.8, 0.0, 2.2), 118, 17],
-		["持棍戒僧", Vector3(3.6, 0.0, 0.2), 136, 18],
+		["巡夜武僧", Vector3(-3.8, 0.0, 2.2), 118, 17, true],
+		["持棍戒僧", Vector3(3.6, 0.0, 0.2), 136, 18, true],
 	]
 
 
@@ -150,6 +157,8 @@ func _spawn_enemy_wave(specs: Array) -> void:
 		enemy.move_speed = 3.2
 		enemy.defeated.connect(_on_enemy_defeated)
 		world.add_actor(enemy)
+		if spec.size() > 4 and bool(spec[4]):
+			enemy.enable_vision_cone()
 		enemy.enable_patrol(enemy.position, 1.25, float(enemies.size() + 1))
 		enemies.append(enemy)
 
@@ -269,7 +278,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if GameState.dungeon_state == "mechanism_available":
 				_command_use_mechanism()
 			elif GameState.dungeon_state == "infiltrate":
-				GameState.set_message("巡夜武僧正守着总闸，贸然靠近会惊动整个禅院。")
+				if _temple_guards_alerted():
+					GameState.set_message("守卫已经进入警戒，无法悄然操作总闸。")
+				else:
+					_command_use_mechanism()
 			else:
 				GameState.set_message("机关总闸已经失去作用。")
 			return
@@ -316,6 +328,7 @@ func _select_enemy(enemy: WuxiaActor3D) -> void:
 	selected_enemy = enemy
 	selected_enemy.selected = true
 	selected_enemy.combat_target = player
+	selected_enemy.set_alerted(true)
 	player.combat_target = enemy
 	retarget_time = 0.0
 	target_label.text = "目标｜%s  %d/%d" % [enemy.display_name, enemy.health, enemy.max_health]
@@ -349,6 +362,7 @@ func _physics_process(delta: float) -> void:
 	_update_player_combat()
 	_update_enemy_combat()
 	_update_dungeon_hazards()
+	_update_boss_mechanics(delta)
 	if is_instance_valid(environment_label):
 		environment_label.text = "%s · %s" % [
 			world.get_time_label(), world.get_weather_label()
@@ -404,11 +418,33 @@ func _update_pending_interactions() -> void:
 		if player.global_position.distance_to(pending_mechanism.global_position) <= 1.45:
 			player.stop()
 			pending_mechanism = null
-			GameState.disable_temple_traps()
+			if GameState.dungeon_state == "infiltrate":
+				if _temple_guards_alerted():
+					GameState.set_message("守卫已经发现少侠，只能先将他们制服。")
+					return
+				GameState.bypass_temple_guards()
+				_despawn_temple_guards()
+			else:
+				GameState.disable_temple_traps()
 			world.set_mechanism_active(false)
 			AudioManager.play_quest()
 			world.shake_camera(0.16)
 			_save_current_game()
+
+
+func _temple_guards_alerted() -> bool:
+	for enemy in enemies:
+		if is_instance_valid(enemy) and (enemy.alerted or enemy.combat_target == player):
+			return true
+	return false
+
+
+func _despawn_temple_guards() -> void:
+	if is_instance_valid(selected_enemy):
+		_clear_target()
+	for enemy in enemies.duplicate():
+		enemies.erase(enemy)
+		enemy.queue_free()
 
 
 func _update_dungeon_hazards() -> void:
@@ -438,6 +474,99 @@ func _update_dungeon_hazards() -> void:
 		_show_damage(player.global_position + Vector3(0, 1.8, 0), 10, Color("#de8b64"))
 		GameState.set_message("踩中翻板暗弩，损失 10 点气血。关闭总闸可解除机关。")
 		return
+
+
+func _update_boss_mechanics(delta: float) -> void:
+	if current_zone != "silent_temple" or GameState.dungeon_state != "boss":
+		_clear_boss_telegraph()
+		boss_phase = 0
+		return
+	var boss := _get_temple_boss()
+	if not is_instance_valid(boss):
+		_clear_boss_telegraph()
+		return
+	var health_ratio := float(boss.health) / float(maxi(1, boss.max_health))
+	var next_phase := 1 if health_ratio > 0.66 else (2 if health_ratio > 0.33 else 3)
+	if next_phase > boss_phase:
+		boss_phase = next_phase
+		boss_skill_cooldown = minf(boss_skill_cooldown, 2.2)
+		GameState.set_message("寂音院主进入第 %d 阶段，范围招式变得更加凶险。" % boss_phase)
+	if is_instance_valid(boss_telegraph):
+		boss_telegraph_time -= delta
+		var progress := 1.0 - boss_telegraph_time / maxf(0.01, boss_telegraph_total)
+		var scale_value := lerpf(0.2, 1.0, clampf(progress, 0.0, 1.0))
+		boss_telegraph.scale = Vector3(scale_value, 1.0, scale_value)
+		if boss_telegraph_time <= 0.0:
+			_resolve_boss_telegraph()
+		return
+	boss_skill_cooldown -= delta
+	if boss_skill_cooldown <= 0.0:
+		_start_boss_telegraph(boss)
+
+
+func _get_temple_boss() -> WuxiaActor3D:
+	for enemy in enemies:
+		if is_instance_valid(enemy) and enemy.display_name == "寂音院主·法砚":
+			return enemy
+	return null
+
+
+func _start_boss_telegraph(boss: WuxiaActor3D) -> void:
+	boss_telegraph_radius = 1.9 + boss_phase * 0.48
+	boss_telegraph_total = 1.55 - boss_phase * 0.18
+	boss_telegraph_time = boss_telegraph_total
+	boss_telegraph_origin = (
+		boss.global_position
+		if boss_phase == 1
+		else player.global_position
+	)
+	boss_telegraph = MeshInstance3D.new()
+	boss_telegraph.name = "院主范围招式预警"
+	boss_telegraph.position = boss_telegraph_origin + Vector3(0, 0.07, 0)
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = boss_telegraph_radius
+	mesh.bottom_radius = boss_telegraph_radius
+	mesh.height = 0.035
+	mesh.radial_segments = 48
+	var material := StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.88, 0.12, 0.08, 0.34)
+	mesh.material = material
+	boss_telegraph.mesh = mesh
+	boss_telegraph.scale = Vector3(0.2, 1.0, 0.2)
+	world.world_root.add_child(boss_telegraph)
+	GameState.set_message("院主正在蓄力“震钟劲”！立即点击预警圈外的地面躲避。")
+
+
+func _resolve_boss_telegraph() -> void:
+	var damage := 14 + boss_phase * 7
+	if player.global_position.distance_to(boss_telegraph_origin) <= boss_telegraph_radius:
+		GameState.damage_player(damage)
+		player.play_hit()
+		AudioManager.play_hit()
+		world.shake_camera(0.38)
+		_show_damage(
+			player.global_position + Vector3(0, 1.8, 0),
+			damage,
+			Color("#ff5e48")
+		)
+		if GameState.player_health <= 0:
+			player.stop()
+			GameState.set_message("少侠被震钟劲击倒。读取存档或重开本章后再战。")
+		else:
+			GameState.set_message("未能及时躲开震钟劲，损失 %d 点气血。" % damage)
+	else:
+		GameState.set_message("少侠及时离开预警区域，避开了震钟劲。")
+	_clear_boss_telegraph()
+	boss_skill_cooldown = 6.2 - boss_phase * 0.75
+
+
+func _clear_boss_telegraph() -> void:
+	if is_instance_valid(boss_telegraph):
+		boss_telegraph.queue_free()
+	boss_telegraph = null
+	boss_telegraph_time = 0.0
 
 
 func _collect_loot(loot: LootPickup3D) -> void:
@@ -507,13 +636,30 @@ func _update_enemy_combat() -> void:
 		var distance_from_home := enemy.global_position.distance_to(enemy.patrol_origin)
 		if enemy != selected_enemy and distance_from_home > 6.5:
 			enemy.combat_target = null
+			enemy.set_alerted(false)
 			if not enemy.moving:
 				enemy.command_move(enemy.patrol_origin)
 			continue
-		if enemy == selected_enemy or distance < 4.2:
-			enemy.combat_target = player
-		elif enemy.combat_target == player and distance > 6.0:
-			enemy.combat_target = null
+		var sentry_mode := (
+			current_zone == "silent_temple"
+			and GameState.dungeon_state == "infiltrate"
+			and enemy.vision_radius > 0.0
+		)
+		if sentry_mode:
+			var spotted := enemy.can_see(player)
+			if enemy == selected_enemy or spotted:
+				if not enemy.alerted:
+					GameState.set_message("%s发现了少侠，潜行路线暂时失效！" % enemy.display_name)
+				enemy.combat_target = player
+				enemy.set_alerted(true)
+			elif enemy.combat_target == player and distance > 7.0:
+				enemy.combat_target = null
+				enemy.set_alerted(false)
+		else:
+			if enemy == selected_enemy or distance < 4.2:
+				enemy.combat_target = player
+			elif enemy.combat_target == player and distance > 6.0:
+				enemy.combat_target = null
 		if enemy.combat_target != player:
 			continue
 		if distance < 1.15:
@@ -823,8 +969,8 @@ func _refresh_dungeon_hud() -> void:
 	match GameState.dungeon_state:
 		"infiltrate":
 			quest_title_label.text = "◆ 夜探寂音禅院"
-			quest_description_label.text = "避开中轴踏板，制服两名巡夜武僧。"
-			quest_count.text = "%d / 2 名守卫已制服" % (2 - enemies.size())
+			quest_description_label.text = "避开黄色视野锥潜入总闸，或正面制服守卫。"
+			quest_count.text = "潜行总闸 / 强攻 %d / 2" % (2 - enemies.size())
 		"mechanism_available":
 			quest_title_label.text = "◆ 关闭机关总闸"
 			quest_description_label.text = "西偏殿前的橙色拉杆控制暗弩与牢门。"
@@ -832,7 +978,11 @@ func _refresh_dungeon_hud() -> void:
 		"rescue":
 			quest_title_label.text = "◆ 营救被困商客"
 			quest_description_label.text = "机关已经关闭，前往东侧地牢。"
-			quest_count.text = "与顾行舟交谈"
+			quest_count.text = (
+				"潜行成功 · 与顾行舟交谈"
+				if GameState.dungeon_approach == "stealth"
+				else "强攻完成 · 与顾行舟交谈"
+			)
 		"boss":
 			quest_title_label.text = "◆ 击败寂音院主"
 			quest_description_label.text = "院主带着护院武僧赶到地牢前。"
@@ -1029,8 +1179,14 @@ func _open_quest_window() -> void:
 			"mercy": "宽宥悔悟僧人",
 			"treasure": "带走禅院赃银",
 		}
-		progress_text = "副本阶段：%s\n最终裁定：%s" % [
+		var approach_names := {
+			"": "尚未决定",
+			"stealth": "无声潜入",
+			"force": "正面强攻",
+		}
+		progress_text = "副本阶段：%s\n潜入方式：%s\n最终裁定：%s" % [
 			stage_names.get(GameState.dungeon_state, "尚未进入"),
+			approach_names.get(GameState.dungeon_approach, "尚未决定"),
 			ending_names.get(GameState.dungeon_ending, "尚未裁定"),
 		]
 	else:
@@ -1183,7 +1339,10 @@ func _open_temple_dialogue() -> void:
 	var action: Callable
 	match GameState.dungeon_state:
 		"infiltrate":
-			dialogue = "牢外仍有巡夜武僧，我不敢出声。中轴石道的暗色踏板会触发弩箭，少侠当心。"
+			dialogue = (
+				"牢外守卫的黄色视野锥代表警戒范围。少侠可绕到西侧总闸无声潜入，"
+				+ "也可正面制服他们；中轴暗色踏板会触发弩箭。"
+			)
 			action_text = "先清守卫"
 			action = _close_active_window
 		"mechanism_available":
@@ -1215,6 +1374,8 @@ func _open_temple_dialogue() -> void:
 func _rescue_temple_prisoner() -> void:
 	_close_active_window()
 	GameState.rescue_temple_prisoner()
+	boss_phase = 0
+	boss_skill_cooldown = 3.0
 	_spawn_enemy_wave(_temple_boss_specs())
 	AudioManager.play_quest()
 	world.shake_camera(0.22)
@@ -1243,6 +1404,9 @@ func _switch_zone(zone_id: String) -> void:
 	if zone_id == current_zone or zone_id not in ["cloud_ford", "silent_temple"]:
 		return
 	_clear_target()
+	_clear_boss_telegraph()
+	boss_phase = 0
+	boss_skill_cooldown = 3.0
 	player.stop()
 	pending_loot = null
 	pending_npc = null

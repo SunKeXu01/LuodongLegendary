@@ -54,6 +54,7 @@ var cloud_ford_reputation: int = 0
 var evidence_count: int = 0
 var dungeon_state: String = "locked"
 var dungeon_ending: String = ""
+var dungeon_approach: String = ""
 var inventory: Array[Dictionary] = []
 var equipment := {"weapon": "", "armor": "", "accessory": ""}
 var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
@@ -85,6 +86,7 @@ func reset() -> void:
 	evidence_count = 0
 	dungeon_state = "locked"
 	dungeon_ending = ""
+	dungeon_approach = ""
 	inventory = [
 		{"id": "worn_sword", "count": 1},
 		{"id": "healing_salve", "count": 2},
@@ -259,9 +261,20 @@ func begin_silent_temple() -> void:
 func mark_temple_guards_cleared() -> void:
 	if dungeon_state != "infiltrate":
 		return
+	dungeon_approach = "force"
 	dungeon_state = "mechanism_available"
 	quest_text = "关闭地牢机关"
 	set_message("巡夜武僧已被制服。点击西偏殿前的机关总闸关闭陷阱。")
+
+
+func bypass_temple_guards() -> void:
+	if dungeon_state != "infiltrate":
+		return
+	dungeon_approach = "stealth"
+	dungeon_state = "rescue"
+	quest_text = "营救被困商客"
+	add_experience(15)
+	set_message("未惊动巡夜武僧便关闭了总闸：获得 15 点潜行经验。")
 
 
 func disable_temple_traps() -> void:
@@ -297,6 +310,8 @@ func finish_silent_temple(ending: String) -> void:
 	add_experience(65)
 	add_item("silent_temple_manual", 1)
 	equip_item("silent_temple_manual")
+	if dungeon_approach == "stealth":
+		cloud_ford_reputation += 1
 	if ending == "justice":
 		add_silver(100)
 		cloud_ford_reputation += 3
@@ -357,6 +372,7 @@ func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
 		"dungeon": {
 			"state": dungeon_state,
 			"ending": dungeon_ending,
+			"approach": dungeon_approach,
 		},
 		"inventory": inventory.duplicate(true),
 		"equipment": equipment.duplicate(true),
@@ -400,6 +416,7 @@ func load_game(path := SAVE_PATH) -> Dictionary:
 	var dungeon_data: Dictionary = parsed.get("dungeon", {})
 	dungeon_state = str(dungeon_data.get("state", "locked"))
 	dungeon_ending = str(dungeon_data.get("ending", ""))
+	dungeon_approach = str(dungeon_data.get("approach", ""))
 	inventory.assign(parsed.get("inventory", []))
 	equipment = parsed.get(
 		"equipment", {"weapon": "worn_sword", "armor": "", "accessory": ""}

@@ -65,7 +65,8 @@ jobs:
           if (
             $LASTEXITCODE -ne 0 -or
             $testOutput -notmatch "GAMEPLAY STATE SMOKE TEST PASSED" -or
-            $testOutput -match "SCRIPT ERROR|Failed to load script|Parse Error"
+            $testOutput -match `
+              "SCRIPT ERROR|Failed to load script|Parse Error|ObjectDB instances were leaked"
           ) {
             throw "Gameplay state smoke tests failed."
           }

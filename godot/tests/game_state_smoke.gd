@@ -50,6 +50,7 @@ func _ready() -> void:
 	_expect(GameState.dungeon_state == "infiltrate", "完成序章后应能进入寂音禅院")
 	GameState.mark_temple_guards_cleared()
 	_expect(GameState.dungeon_state == "mechanism_available", "清除守卫后应开放机关目标")
+	_expect(GameState.dungeon_approach == "force", "击败守卫应记录正面强攻路线")
 	GameState.disable_temple_traps()
 	_expect(GameState.dungeon_state == "rescue", "关闭总闸后应进入营救阶段")
 	GameState.rescue_temple_prisoner()
@@ -81,6 +82,7 @@ func _ready() -> void:
 	_expect(GameState.cloud_ford_reputation == 6, "读取存档后声望应恢复")
 	_expect(GameState.dungeon_state == "completed", "读取存档后副本状态应恢复")
 	_expect(GameState.dungeon_ending == "justice", "读取存档后副本结局应恢复")
+	_expect(GameState.dungeon_approach == "force", "读取存档后潜入方式应恢复")
 	_expect(GameState.player_level == 9, "读取存档后境界应恢复")
 	_expect(GameState.player_max_health == 112, "读取存档后气血上限应恢复")
 	_expect(GameState.silver == 175, "读取存档后碎银应恢复")
@@ -125,20 +127,41 @@ func _ready() -> void:
 	_expect(temple_enemies.size() == 2, "初次进入禅院应生成两名巡夜守卫")
 	_expect(is_instance_valid(temple_world.mechanism_marker), "禅院地图应包含可交互机关总闸")
 	var dungeon_player = main_scene.get("player")
+	if not temple_enemies.is_empty():
+		var sentry = temple_enemies[0]
+		dungeon_player.global_position = (
+			sentry.global_position + sentry.global_transform.basis.z.normalized() * 2.0
+		)
+		_expect(sentry.can_see(dungeon_player), "玩家进入黄色视野锥时守卫应能发现目标")
+		_expect(is_instance_valid(sentry.vision_cone), "巡夜守卫应显示视野锥")
 	var health_before_trap := GameState.player_health
 	dungeon_player.global_position = Vector3(-2.0, 0.0, 1.3)
 	main_scene.call("_update_dungeon_hazards")
 	_expect(GameState.player_health == health_before_trap - 10, "踩中禅院踏板应损失 10 点气血")
-	for enemy in temple_enemies:
-		enemy.queue_free()
-	temple_enemies.clear()
-	GameState.mark_temple_guards_cleared()
-	GameState.disable_temple_traps()
+	dungeon_player.global_position = temple_world.mechanism_marker.global_position + Vector3(0.9, 0, 0.4)
+	main_scene.set("pending_mechanism", temple_world.mechanism_marker)
+	main_scene.call("_update_pending_interactions")
+	_expect(GameState.dungeon_state == "rescue", "未触发警戒时操作总闸应直接进入营救阶段")
+	_expect(GameState.dungeon_approach == "stealth", "绕过守卫应记录无声潜入路线")
+	_expect(main_scene.get("enemies").is_empty(), "潜行成功后巡夜守卫应退出当前战斗")
 	main_scene.call("_rescue_temple_prisoner")
 	var boss_wave: Array = main_scene.get("enemies")
 	_expect(boss_wave.size() == 3, "营救商客后应生成院主与两名护院武僧")
 	if not boss_wave.is_empty():
 		_expect(boss_wave[0].display_name == "寂音院主·法砚", "首领波次应包含寂音院主")
+		main_scene.set("boss_skill_cooldown", 0.0)
+		main_scene.call("_update_boss_mechanics", 0.1)
+		_expect(
+			is_instance_valid(main_scene.get("boss_telegraph")),
+			"院主应生成可见的范围招式预警"
+		)
+		var health_before_aoe := GameState.player_health
+		dungeon_player.global_position = main_scene.get("boss_telegraph_origin")
+		main_scene.call("_update_boss_mechanics", 2.0)
+		_expect(GameState.player_health == health_before_aoe - 21, "第一阶段震钟劲应造成 21 点伤害")
+		boss_wave[0].health = 80
+		main_scene.call("_update_boss_mechanics", 0.1)
+		_expect(main_scene.get("boss_phase") == 3, "院主低于三分之一气血时应进入第三阶段")
 	boss_wave.clear()
 	main_scene.queue_free()
 	AudioManager.stop_all()

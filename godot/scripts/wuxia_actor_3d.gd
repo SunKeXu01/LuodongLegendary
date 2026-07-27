@@ -36,6 +36,11 @@ var patrol_radius := 0.0
 var patrol_wait := 0.0
 var patrol_phase := 0.0
 var animation_state := "idle"
+var vision_radius := 0.0
+var vision_angle_degrees := 70.0
+var vision_cone: MeshInstance3D
+var vision_material: StandardMaterial3D
+var alerted := false
 
 
 func _ready() -> void:
@@ -66,6 +71,57 @@ func enable_patrol(origin: Vector3, radius: float, phase: float) -> void:
 	patrol_radius = radius
 	patrol_phase = phase
 	patrol_wait = 0.8 + phase * 0.25
+
+
+func enable_vision_cone(radius := 5.2, angle_degrees := 70.0) -> void:
+	vision_radius = radius
+	vision_angle_degrees = angle_degrees
+	vision_cone = MeshInstance3D.new()
+	vision_cone.name = "警戒视野"
+	vision_cone.position.y = 0.035
+	vision_cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mesh := ImmediateMesh.new()
+	vision_material = StandardMaterial3D.new()
+	vision_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	vision_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	vision_material.no_depth_test = true
+	vision_material.albedo_color = Color(0.85, 0.68, 0.25, 0.2)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, vision_material)
+	var segments := 18
+	var half_angle := deg_to_rad(angle_degrees * 0.5)
+	for index in range(segments):
+		var first := lerpf(-half_angle, half_angle, float(index) / float(segments))
+		var second := lerpf(-half_angle, half_angle, float(index + 1) / float(segments))
+		mesh.surface_add_vertex(Vector3.ZERO)
+		mesh.surface_add_vertex(Vector3(sin(first) * radius, 0, cos(first) * radius))
+		mesh.surface_add_vertex(Vector3(sin(second) * radius, 0, cos(second) * radius))
+	mesh.surface_end()
+	vision_cone.mesh = mesh
+	add_child(vision_cone)
+
+
+func can_see(target: Node3D) -> bool:
+	if vision_radius <= 0.0 or not is_instance_valid(target):
+		return false
+	var offset := target.global_position - global_position
+	offset.y = 0.0
+	if offset.length() > vision_radius or offset.length_squared() < 0.0001:
+		return false
+	var forward := global_transform.basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var minimum_dot := cos(deg_to_rad(vision_angle_degrees * 0.5))
+	return forward.dot(offset.normalized()) >= minimum_dot
+
+
+func set_alerted(value: bool) -> void:
+	alerted = value
+	if is_instance_valid(vision_material):
+		vision_material.albedo_color = (
+			Color(0.92, 0.18, 0.12, 0.34)
+			if value
+			else Color(0.85, 0.68, 0.25, 0.2)
+		)
 
 
 func take_damage(amount: int) -> void:
@@ -102,6 +158,8 @@ func play_defeat() -> void:
 		nameplate.visible = false
 	if is_instance_valid(selection_disc):
 		selection_disc.visible = false
+	if is_instance_valid(vision_cone):
+		vision_cone.visible = false
 
 
 func _physics_process(delta: float) -> void:

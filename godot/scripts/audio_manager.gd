@@ -32,7 +32,7 @@ func stop_all() -> void:
 	for child in get_children():
 		if child is AudioStreamPlayer:
 			child.stop()
-			child.queue_free()
+			child.free()
 
 
 func _play(sound_name: String) -> void:
