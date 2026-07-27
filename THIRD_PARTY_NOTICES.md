@@ -120,6 +120,25 @@ No upstream map, neon advertisements, gameplay, code, characters, names or
 story content is included. The exact imported files and license link are
 recorded in `godot/assets/vendor/polygonal_mind/SOURCE.md`.
 
+## catprisbrey/Cats-Godot4-Modular-Souls-like-Template
+
+- Source:
+  <https://github.com/catprisbrey/Cats-Godot4-Modular-Souls-like-Template>
+- Pinned source commit: `d8bceffc5bf4afe585a3a926fd9aa60ebd26e001`
+- License: The Unlicense / public domain
+- Used assets: `mannyquin.glb`, `minnyquinn.glb` and `MeleeLib.res`
+- Actual use: mature-proportion modular humanoids replace the former active
+  KayKit player, NPC and enemy silhouettes. The shared humanoid animation
+  library supplies idle, walking, running, melee, hit and defeat actions.
+- Changes: retained the upstream Godot humanoid bone maps, disabled external
+  material overrides, applied original role-specific palettes and selectively
+  hid armor modules for civilian roles.
+
+The project uses these assets as an interim body, rig and animation foundation.
+Original names, roles, combat rules, maps, UI and Ming-era story remain this
+project's work. Exact file provenance and checksums are recorded in
+`godot/assets/vendor/cats_soulslike/SOURCE.md` and `SHA256SUMS`.
+
 ## remarkablegames/phaser-rpg
 
 - Source: <https://github.com/remarkablegames/phaser-rpg>

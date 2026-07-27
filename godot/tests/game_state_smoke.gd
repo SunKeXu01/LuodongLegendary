@@ -213,9 +213,36 @@ func _ready() -> void:
 	var world_player = main_scene.get("player")
 	_expect(world_player.uses_imported_model, "玩家应使用带骨骼动画的外部 GLB 模型")
 	_expect(
+		world_player.imported_model_family == "cats_soulslike",
+		"玩家应使用成熟比例的 CC0/公版人形模型而不是 KayKit 卡通模型"
+	)
+	var player_humanoid: Node = world_player.find_child("CatsSoulslikeHumanoid", true, false)
+	_expect(is_instance_valid(player_humanoid), "玩家应生成可重定向动作的人形骨骼节点")
+	_expect(
 		is_instance_valid(world_player.animation_player)
 		and not world_player.animation_player.get_animation_list().is_empty(),
 		"玩家外部模型应包含可播放的动作"
+	)
+	_expect(
+		world_player.animation_player.has_animation("MeleeLib/LightIdle")
+		and world_player.animation_player.has_animation("MeleeLib/LightRunning")
+		and world_player.animation_player.has_animation("MeleeLib/Slash1"),
+		"玩家应载入待机、奔跑和近战招式动作"
+	)
+	var player_armor := world_player.find_child("Armor", true, false) as MeshInstance3D
+	var player_helm := world_player.find_child("Helm", true, false) as MeshInstance3D
+	_expect(
+		is_instance_valid(player_armor)
+		and not player_armor.visible
+		and is_instance_valid(player_helm)
+		and not player_helm.visible,
+		"玩家应隐藏西式铠甲模块，保留可继续换装的武侠人形基底"
+	)
+	_expect(
+		is_instance_valid(world_player.find_child("明式长衫上衣", true, false))
+		and is_instance_valid(world_player.find_child("交领下裳", true, false))
+		and is_instance_valid(world_player.find_child("右手佩刀", true, false)),
+		"玩家应在成熟人形骨骼上生成随动作变形的明式长衫、下裳和佩刀"
 	)
 	_expect(
 		cloud_world.camera.projection == Camera3D.PROJECTION_ORTHOGONAL,
@@ -243,6 +270,19 @@ func _ready() -> void:
 	var initial_enemies: Array = main_scene.get("enemies")
 	if not initial_enemies.is_empty():
 		var first_world_enemy = initial_enemies[0]
+		_expect(
+			first_world_enemy.imported_model_family == "cats_soulslike",
+			"敌人应和玩家共用成熟比例人形骨骼与动作库"
+		)
+		var enemy_armor := first_world_enemy.find_child("Armor", true, false) as MeshInstance3D
+		var enemy_helm := first_world_enemy.find_child("Helm", true, false) as MeshInstance3D
+		_expect(
+			is_instance_valid(enemy_armor)
+			and enemy_armor.visible
+			and is_instance_valid(enemy_helm)
+			and enemy_helm.visible,
+			"敌对武人应显示可辨识的护甲和头盔模块"
+		)
 		_expect(first_world_enemy.actor_level == 8, "普通敌人头顶境界应与当前章节匹配")
 		_expect(
 			is_instance_valid(first_world_enemy.health_bar_fill),

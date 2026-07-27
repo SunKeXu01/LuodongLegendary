@@ -4,6 +4,7 @@ extends CharacterBody3D
 signal defeated(actor: WuxiaActor3D)
 
 const KAYKIT_ADVENTURERS := "res://assets/vendor/kaykit_adventurers/"
+const CATS_SOULSLIKE := "res://assets/vendor/cats_soulslike/"
 
 @export var display_name := "江湖客"
 @export var hostile := false
@@ -42,6 +43,7 @@ var animation_player: AnimationPlayer
 var animation_tree: AnimationTree
 var animation_playback: AnimationNodeStateMachinePlayback
 var uses_imported_model := false
+var imported_model_family := ""
 var navigation_agent: NavigationAgent3D
 var patrol_origin := Vector3.ZERO
 var patrol_radius := 0.0
@@ -291,6 +293,9 @@ func _create_model() -> void:
 
 
 func _create_imported_model() -> bool:
+	if _create_cats_soulslike_model():
+		return true
+
 	var model_files := {
 		"hero": "Rogue_Hooded.glb",
 		"npc": "Knight.glb",
@@ -315,7 +320,267 @@ func _create_imported_model() -> bool:
 		if is_instance_valid(animation_player):
 			break
 	uses_imported_model = is_instance_valid(animation_player)
+	if uses_imported_model:
+		imported_model_family = "kaykit"
 	return uses_imported_model
+
+
+func _create_cats_soulslike_model() -> bool:
+	var model_file := (
+		"minnyquinn.glb"
+		if visual_variant == "npc"
+		else "mannyquin.glb"
+	)
+	var resource_path := "%scharacters/%s" % [CATS_SOULSLIKE, model_file]
+	var scene := load(resource_path) as PackedScene
+	var melee_library := load(
+		"%sanimations/MeleeLib.res" % CATS_SOULSLIKE
+	) as AnimationLibrary
+	if scene == null or melee_library == null:
+		return false
+	var imported := scene.instantiate() as Node3D
+	if imported == null:
+		return false
+	imported.name = "CatsSoulslikeHumanoid"
+	imported.rotation_degrees.y = 180.0
+	imported.scale = Vector3.ONE * (1.04 if visual_variant == "boss" else 0.94)
+	model_root.add_child(imported)
+	_configure_cats_soulslike_appearance(imported)
+	_create_wuxia_costume(imported)
+
+	for candidate in imported.find_children("*", "AnimationPlayer", true, false):
+		animation_player = candidate as AnimationPlayer
+		if is_instance_valid(animation_player):
+			break
+	if not is_instance_valid(animation_player):
+		imported.queue_free()
+		return false
+	if animation_player.has_animation_library("MeleeLib"):
+		animation_player.remove_animation_library("MeleeLib")
+	animation_player.add_animation_library("MeleeLib", melee_library)
+	imported_model_family = "cats_soulslike"
+	uses_imported_model = (
+		animation_player.has_animation("MeleeLib/LightIdle")
+		and animation_player.has_animation("MeleeLib/LightRunning")
+		and animation_player.has_animation("MeleeLib/Slash1")
+	)
+	if not uses_imported_model:
+		imported.queue_free()
+		animation_player = null
+	return uses_imported_model
+
+
+func _configure_cats_soulslike_appearance(imported: Node3D) -> void:
+	var armored := visual_variant in ["enemy", "boss"]
+	for candidate in imported.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := candidate as MeshInstance3D
+		if mesh_instance == null:
+			continue
+		if mesh_instance.name in ["Armor", "Helm"]:
+			mesh_instance.visible = armored
+		if mesh_instance.name == "Hair":
+			mesh_instance.visible = not armored
+		if mesh_instance.mesh == null:
+			continue
+		for surface_index in mesh_instance.mesh.get_surface_count():
+			var source_material := (
+				mesh_instance.mesh.surface_get_material(surface_index)
+				as StandardMaterial3D
+			)
+			if source_material == null:
+				continue
+			var material := source_material.duplicate() as StandardMaterial3D
+			if source_material.resource_name == "Cloth":
+				material.albedo_color = _cats_cloth_color()
+			elif source_material.resource_name == "Metal":
+				material.albedo_color = (
+					Color("#6b242b")
+					if visual_variant == "boss"
+					else Color("#39414b")
+				)
+				material.metallic = 0.72
+				material.roughness = 0.34
+			elif source_material.resource_name == "Hair":
+				material.albedo_color = Color("#171a1d")
+				material.roughness = 0.72
+			mesh_instance.set_surface_override_material(surface_index, material)
+
+
+func _create_wuxia_costume(imported: Node3D) -> void:
+	var skeleton := imported.find_child("GeneralSkeleton", true, false) as Skeleton3D
+	if skeleton == null:
+		return
+	var cloth := _cats_cloth_color()
+	var cloth_dark := cloth.darkened(0.26)
+	var trim := Color("#c9aa63") if visual_variant != "boss" else Color("#b96755")
+
+	_add_bone_cylinder(
+		skeleton,
+		"Chest",
+		"明式长衫上衣",
+		Vector3(0, 0.015, 0),
+		0.255,
+		0.31,
+		0.52,
+		cloth
+	)
+	_add_bone_cylinder(
+		skeleton,
+		"Hips",
+		"交领下裳",
+		Vector3(0, -0.2, 0),
+		0.27,
+		0.39,
+		0.68,
+		cloth_dark
+	)
+	_add_bone_cylinder(
+		skeleton,
+		"Hips",
+		"束革腰带",
+		Vector3(0, 0.075, 0),
+		0.315,
+		0.315,
+		0.085,
+		trim.darkened(0.28)
+	)
+	_add_bone_box(
+		skeleton,
+		"Chest",
+		"交领衣襟",
+		Vector3(0.0, 0.05, -0.285),
+		Vector3(0.065, 0.48, 0.025),
+		trim,
+		Vector3(0, 0, -12.0)
+	)
+	for side in ["Left", "Right"]:
+		_add_bone_cylinder(
+			skeleton,
+			"%sUpperArm" % side,
+			"%s广袖" % ("左" if side == "Left" else "右"),
+			Vector3(0, 0.14, 0),
+			0.145,
+			0.115,
+			0.3,
+			cloth
+		)
+		_add_bone_cylinder(
+			skeleton,
+			"%sLowerArm" % side,
+			"%s袖口" % ("左" if side == "Left" else "右"),
+			Vector3(0, 0.1, 0),
+			0.12,
+			0.15,
+			0.22,
+			cloth_dark
+		)
+
+	if visual_variant != "npc":
+		_create_wuxia_sword(skeleton, trim)
+
+
+func _create_wuxia_sword(skeleton: Skeleton3D, trim: Color) -> void:
+	var hand := _bone_attachment(skeleton, "RightHand", "右手佩刀")
+	if hand == null:
+		return
+	_add_box(
+		hand,
+		Vector3(0, 0.43, 0),
+		Vector3(0.045, 0.78, 0.07),
+		Color("#d7dce0")
+	)
+	_add_box(
+		hand,
+		Vector3(0, 0.035, 0),
+		Vector3(0.26, 0.055, 0.11),
+		trim.darkened(0.2)
+	)
+	_add_cylinder(
+		hand,
+		Vector3(0, -0.12, 0),
+		0.045,
+		0.055,
+		0.28,
+		Color("#49362b")
+	)
+	weapon_pivot = hand
+
+
+func _bone_attachment(
+	skeleton: Skeleton3D,
+	bone_name: String,
+	node_name: String
+) -> BoneAttachment3D:
+	if skeleton.find_bone(bone_name) < 0:
+		return null
+	var attachment := BoneAttachment3D.new()
+	attachment.name = node_name
+	attachment.bone_name = bone_name
+	skeleton.add_child(attachment)
+	return attachment
+
+
+func _add_bone_cylinder(
+	skeleton: Skeleton3D,
+	bone_name: String,
+	node_name: String,
+	at: Vector3,
+	top_radius: float,
+	bottom_radius: float,
+	height: float,
+	color: Color
+) -> void:
+	var attachment := _bone_attachment(skeleton, bone_name, "%s挂点" % node_name)
+	if attachment == null:
+		return
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.position = at
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = top_radius
+	mesh.bottom_radius = bottom_radius
+	mesh.height = height
+	mesh.radial_segments = 12
+	mesh.rings = 3
+	mesh.material = _material(color)
+	instance.mesh = mesh
+	attachment.add_child(instance)
+
+
+func _add_bone_box(
+	skeleton: Skeleton3D,
+	bone_name: String,
+	node_name: String,
+	at: Vector3,
+	dimensions: Vector3,
+	color: Color,
+	rotation_degrees_value := Vector3.ZERO
+) -> void:
+	var attachment := _bone_attachment(skeleton, bone_name, "%s挂点" % node_name)
+	if attachment == null:
+		return
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.position = at
+	instance.rotation_degrees = rotation_degrees_value
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	mesh.material = _material(color)
+	instance.mesh = mesh
+	attachment.add_child(instance)
+
+
+func _cats_cloth_color() -> Color:
+	match visual_variant:
+		"hero":
+			return Color("#173f38")
+		"npc":
+			return Color("#71483d")
+		"enemy":
+			return Color("#392d31")
+		"boss":
+			return Color("#4d2028")
+	return Color("#2d3334")
 
 
 func _create_selection_disc() -> void:
@@ -632,13 +897,23 @@ func _set_animation_state(value: String) -> void:
 func _play_imported_animation(state: String) -> void:
 	if not is_instance_valid(animation_player):
 		return
-	var preferred := {
-		"idle": ["Idle"],
-		"run": ["Running_A", "Running_B", "Walking_A"],
-		"attack": ["Attack_Slice", "Attack_Chop", "Attack_Stab"],
-		"hit": ["Hit_A", "Hit_B", "Hit"],
-		"defeated": ["Death_A", "Death_B"],
-	}
+	var preferred := {}
+	if imported_model_family == "cats_soulslike":
+		preferred = {
+			"idle": ["LightIdle"],
+			"run": ["LightRunning", "LightWalking"],
+			"attack": ["Slash1", "Slash2", "Stab1"],
+			"hit": ["Hurt1", "Hurt2"],
+			"defeated": ["Die1"],
+		}
+	else:
+		preferred = {
+			"idle": ["Idle"],
+			"run": ["Running_A", "Running_B", "Walking_A"],
+			"attack": ["Attack_Slice", "Attack_Chop", "Attack_Stab"],
+			"hit": ["Hit_A", "Hit_B", "Hit"],
+			"defeated": ["Death_A", "Death_B"],
+		}
 	var available := animation_player.get_animation_list()
 	for requested in preferred.get(state, ["Idle"]):
 		for animation_name in available:
