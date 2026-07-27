@@ -1,9 +1,9 @@
 class_name MinimapWidget
 extends Control
 
-var player: Node2D
-var enemies: Array[WuxiaActor] = []
-var world_rect := Rect2(105, 190, 1110, 435)
+var player: Node3D
+var enemies: Array[WuxiaActor3D] = []
+var world_rect := Rect2(-11.5, -8.2, 23.0, 15.4)
 
 
 func _ready() -> void:
@@ -15,15 +15,16 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 
-func configure(player_actor: Node2D, hostile_actors: Array[WuxiaActor]) -> void:
+func configure(player_actor: Node3D, hostile_actors: Array[WuxiaActor3D]) -> void:
 	player = player_actor
 	enemies = hostile_actors
 
 
-func _world_to_map(world_position: Vector2) -> Vector2:
+func _actor_map_position(actor: Node3D) -> Vector2:
+	var world_position: Vector3 = actor.global_position
 	var normalized := Vector2(
 		(world_position.x - world_rect.position.x) / world_rect.size.x,
-		(world_position.y - world_rect.position.y) / world_rect.size.y
+		(world_position.z - world_rect.position.y) / world_rect.size.y
 	)
 	return Vector2(18, 18) + normalized * (size - Vector2(36, 36))
 
@@ -45,8 +46,8 @@ func _draw() -> void:
 
 	for enemy in enemies:
 		if is_instance_valid(enemy):
-			draw_circle(_world_to_map(enemy.global_position), 4.0, Color("#d45249"))
+			draw_circle(_actor_map_position(enemy), 4.0, Color("#d45249"))
 	if is_instance_valid(player):
-		var point := _world_to_map(player.global_position)
+		var point := _actor_map_position(player)
 		draw_circle(point, 6.0, Color("#e9cf72"))
 		draw_arc(point, 8.0, 0.0, TAU, 20, Color("#fff0a6"), 1.5)

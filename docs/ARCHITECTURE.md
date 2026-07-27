@@ -27,12 +27,16 @@ Godot 4.7.1
   │   └─ CombatRules 确定性战斗规则
   ├─ Main 场景
   │   ├─ 实时渲染 3D 云津渡背景
-  │   ├─ NavigationRegion2D 可行走区域
+  │   ├─ 摄像机射线点击地面
   │   └─ CanvasLayer 网游式 HUD
-  ├─ WuxiaActor
-  │   ├─ NavigationAgent2D 点击寻路
-  │   ├─ 玩家与敌人表现
-  │   └─ 选敌、追击、伤害与死亡
+  ├─ CloudFordWorld3D
+  │   ├─ SubViewport 实时 3D 世界
+  │   ├─ 斜视角平滑镜头跟随
+  │   └─ 屏幕坐标与世界坐标转换
+  ├─ WuxiaActor3D
+  │   ├─ CharacterBody3D 玩家与敌人
+  │   ├─ 3D 移动、转向与碰撞
+  │   └─ 名牌、选中环、攻击和受击表现
   └─ GameState
       ├─ 气血、碎银与武学状态
       └─ 离线游戏状态边界

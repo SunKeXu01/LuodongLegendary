@@ -1,13 +1,14 @@
 extends Node2D
 
-const Actor = preload("res://scripts/wuxia_actor.gd")
+const Actor = preload("res://scripts/wuxia_actor_3d.gd")
 const Minimap = preload("res://scripts/minimap_widget.gd")
 const CloudFordWorld = preload("res://scripts/cloud_ford_world_3d.gd")
 
-var player: WuxiaActor
-var enemies: Array[WuxiaActor] = []
-var selected_enemy: WuxiaActor
-var move_marker := Vector2.ZERO
+var player: WuxiaActor3D
+var enemies: Array[WuxiaActor3D] = []
+var selected_enemy: WuxiaActor3D
+var world: CloudFordWorld3D
+var move_marker := Vector3.ZERO
 var marker_time := 0.0
 var retarget_time := 0.0
 var enemy_attack_time := 0.0
@@ -28,7 +29,6 @@ var heal_cooldown := 0.0
 func _ready() -> void:
 	GameState.reset()
 	_create_background()
-	_create_navigation()
 	_create_player()
 	_create_enemies()
 	_create_hud()
@@ -37,8 +37,8 @@ func _ready() -> void:
 
 
 func _create_background() -> void:
-	var background: CloudFordWorld3D = CloudFordWorld.new()
-	add_child(background)
+	world = CloudFordWorld.new()
+	add_child(world)
 
 	var shade := ColorRect.new()
 	shade.color = Color(0.025, 0.035, 0.03, 0.08)
@@ -48,43 +48,30 @@ func _create_background() -> void:
 	add_child(shade)
 
 
-func _create_navigation() -> void:
-	var region := NavigationRegion2D.new()
-	var polygon := NavigationPolygon.new()
-	polygon.vertices = PackedVector2Array([
-		Vector2(105, 350), Vector2(280, 215), Vector2(1040, 190),
-		Vector2(1215, 285), Vector2(1215, 625), Vector2(105, 625)
-	])
-	polygon.add_polygon(PackedInt32Array([0, 1, 2, 3, 4, 5]))
-	region.navigation_polygon = polygon
-	add_child(region)
-
-
 func _create_player() -> void:
 	player = Actor.new()
 	player.display_name = "青冥门少侠"
 	player.max_health = GameState.player_max_health
-	player.position = Vector2(520, 530)
-	player.z_index = 20
-	add_child(player)
+	player.position = Vector3(-1.5, 0.0, 4.8)
+	world.add_actor(player)
+	world.set_follow_target(player)
 
 
 func _create_enemies() -> void:
 	var specs := [
-		["寒岭门客", Vector2(725, 405), 54],
-		["黑衣暗桩", Vector2(910, 520), 72],
-		["寂音武僧", Vector2(1080, 345), 96],
+		["寒岭门客", Vector3(2.8, 0.0, 1.5), 54],
+		["黑衣暗桩", Vector3(5.2, 0.0, 4.5), 72],
+		["寂音武僧", Vector3(6.2, 0.0, -2.8), 96],
 	]
 	for spec in specs:
-		var enemy: WuxiaActor = Actor.new()
+		var enemy: WuxiaActor3D = Actor.new()
 		enemy.display_name = spec[0]
 		enemy.position = spec[1]
 		enemy.max_health = spec[2]
 		enemy.hostile = true
-		enemy.move_speed = 95.0
-		enemy.z_index = 19
+		enemy.move_speed = 3.2
 		enemy.defeated.connect(_on_enemy_defeated)
-		add_child(enemy)
+		world.add_actor(enemy)
 		enemies.append(enemy)
 
 
@@ -96,7 +83,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var click: Vector2 = mouse_event.position
 	for enemy in enemies:
-		if is_instance_valid(enemy) and enemy.global_position.distance_to(click) <= 38.0:
+		if not is_instance_valid(enemy):
+			continue
+		var enemy_screen := world.world_to_screen(enemy.global_position + Vector3(0, 0.9, 0))
+		if enemy_screen.distance_to(click) <= 42.0:
 			_select_enemy(enemy)
 			return
 	_clear_target()
@@ -104,10 +94,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _command_player(click: Vector2) -> void:
-	var destination := Vector2(
-		clampf(click.x, 105.0, 1215.0),
-		clampf(click.y, 215.0, 625.0)
-	)
+	var destination := world.screen_to_ground(click)
 	player.command_move(destination)
 	move_marker = destination
 	marker_time = 0.65
@@ -115,13 +102,11 @@ func _command_player(click: Vector2) -> void:
 	queue_redraw()
 
 
-func _select_enemy(enemy: WuxiaActor) -> void:
+func _select_enemy(enemy: WuxiaActor3D) -> void:
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
-		selected_enemy.queue_redraw()
 	selected_enemy = enemy
 	selected_enemy.selected = true
-	selected_enemy.queue_redraw()
 	player.combat_target = enemy
 	retarget_time = 0.0
 	target_label.text = "目标｜%s  %d/%d" % [enemy.display_name, enemy.health, enemy.max_health]
@@ -135,7 +120,6 @@ func _select_enemy(enemy: WuxiaActor) -> void:
 func _clear_target() -> void:
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
-		selected_enemy.queue_redraw()
 	selected_enemy = null
 	player.combat_target = null
 	target_label.text = "目标｜尚未选中"
@@ -150,7 +134,7 @@ func _physics_process(delta: float) -> void:
 	if qinggong_time > 0.0:
 		qinggong_time = maxf(0.0, qinggong_time - delta)
 		if qinggong_time <= 0.0:
-			player.move_speed = 155.0
+			player.move_speed = 5.0
 	if marker_time > 0.0:
 		queue_redraw()
 	_update_player_combat()
@@ -163,11 +147,11 @@ func _update_player_combat() -> void:
 	if not is_instance_valid(selected_enemy):
 		return
 	var distance := player.global_position.distance_to(selected_enemy.global_position)
-	if distance > 70.0:
+	if distance > 1.35:
 		if retarget_time <= 0.0:
 			var approach := (
 				selected_enemy.global_position
-				+ selected_enemy.global_position.direction_to(player.global_position) * 58.0
+				+ selected_enemy.global_position.direction_to(player.global_position) * 1.1
 			)
 			player.command_move(approach)
 			retarget_time = 0.35
@@ -176,13 +160,16 @@ func _update_player_combat() -> void:
 	if player.attack_cooldown > 0.0:
 		return
 	player.attack_cooldown = 0.72
+	player.play_attack()
 	var damage := 22
 	if GameState.selected_skill == "伏虎掌":
 		damage = 28
 	elif GameState.selected_skill == "机弩术":
 		damage = 18
 	selected_enemy.take_damage(damage)
-	_show_damage(selected_enemy.global_position, damage, Color("#ffe49a"))
+	_show_damage(
+		selected_enemy.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
+	)
 	target_label.text = "目标｜%s  %d/%d" % [
 		selected_enemy.display_name, selected_enemy.health, selected_enemy.max_health
 	]
@@ -199,25 +186,26 @@ func _update_enemy_combat() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		var distance := enemy.global_position.distance_to(player.global_position)
-		if distance < 52.0:
+		if distance < 1.15:
 			enemy_attack_time = 1.05
+			enemy.play_attack()
 			GameState.damage_player(8)
-			_show_damage(player.global_position, 8, Color("#ff776d"))
+			_show_damage(player.global_position + Vector3(0, 1.8, 0), 8, Color("#ff776d"))
 			if GameState.player_health == 0:
 				player.stop()
 				GameState.set_message("少侠气血耗尽。点击右上角“重新闯荡”再次挑战。")
 			else:
 				GameState.set_message("%s发动反击，少侠损失 8 点气血。" % enemy.display_name)
 			return
-		if distance < 245.0 and selected_enemy == enemy:
+		if distance < 5.5 and selected_enemy == enemy:
 			var pursuit := (
 				player.global_position
-				+ player.global_position.direction_to(enemy.global_position) * 46.0
+				+ player.global_position.direction_to(enemy.global_position) * 0.9
 			)
 			enemy.command_move(pursuit)
 
 
-func _on_enemy_defeated(enemy: WuxiaActor) -> void:
+func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 	var name := enemy.display_name
 	if selected_enemy == enemy:
 		selected_enemy = null
@@ -233,10 +221,10 @@ func _on_enemy_defeated(enemy: WuxiaActor) -> void:
 		GameState.set_message("云津渡重归安宁。新的江湖线索已解锁。")
 
 
-func _show_damage(at: Vector2, amount: int, color: Color) -> void:
+func _show_damage(at: Vector3, amount: int, color: Color) -> void:
 	var label := Label.new()
 	label.text = "-%d" % amount
-	label.position = at - Vector2(20, 56)
+	label.position = world.world_to_screen(at) - Vector2(20, 32)
 	label.add_theme_font_size_override("font_size", 22)
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_shadow_color", Color(0.05, 0.03, 0.02, 0.9))
@@ -256,8 +244,9 @@ func _draw() -> void:
 	if marker_time <= 0.0:
 		return
 	var alpha := marker_time / 0.65
-	draw_arc(move_marker, 13.0, 0.0, TAU, 32, Color(0.92, 0.76, 0.34, alpha), 2.0)
-	draw_circle(move_marker, 3.0, Color(1.0, 0.9, 0.55, alpha))
+	var marker_screen := world.world_to_screen(move_marker)
+	draw_arc(marker_screen, 13.0, 0.0, TAU, 32, Color(0.92, 0.76, 0.34, alpha), 2.0)
+	draw_circle(marker_screen, 3.0, Color(1.0, 0.9, 0.55, alpha))
 
 
 func _create_hud() -> void:
@@ -398,7 +387,7 @@ func _refresh_hud() -> void:
 func _activate_skill(skill_name: String) -> void:
 	if skill_name == "踏燕行":
 		qinggong_time = 5.0
-		player.move_speed = 240.0
+		player.move_speed = 7.8
 		GameState.set_message("踏燕行已施展：五息之内移动速度提升。")
 		return
 	if skill_name == "调息":

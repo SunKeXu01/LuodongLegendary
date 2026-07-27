@@ -3,6 +3,9 @@ extends SubViewportContainer
 
 var world_viewport: SubViewport
 var world_root: Node3D
+var camera: Camera3D
+var follow_target: Node3D
+var camera_offset := Vector3(0.0, 15.5, 18.5)
 
 
 func _ready() -> void:
@@ -28,11 +31,42 @@ func _create_viewport() -> void:
 	world_root = Node3D.new()
 	world_viewport.add_child(world_root)
 
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.position = Vector3(0.0, 15.5, 18.5)
 	camera.fov = 43.0
 	camera.look_at_from_position(camera.position, Vector3(0.2, 0.0, -2.0))
 	world_root.add_child(camera)
+
+
+func _process(delta: float) -> void:
+	if not is_instance_valid(follow_target) or not is_instance_valid(camera):
+		return
+	var focus := follow_target.global_position + Vector3(0.0, 0.0, -1.6)
+	var desired := focus + camera_offset
+	camera.global_position = camera.global_position.lerp(desired, minf(1.0, delta * 2.8))
+	camera.look_at(focus, Vector3.UP)
+
+
+func add_actor(actor: Node3D) -> void:
+	world_root.add_child(actor)
+
+
+func set_follow_target(actor: Node3D) -> void:
+	follow_target = actor
+
+
+func screen_to_ground(screen_position: Vector2) -> Vector3:
+	var origin := camera.project_ray_origin(screen_position)
+	var direction := camera.project_ray_normal(screen_position)
+	if absf(direction.y) < 0.0001:
+		return Vector3.ZERO
+	var distance := -origin.y / direction.y
+	var point := origin + direction * distance
+	return Vector3(clampf(point.x, -11.5, 11.5), 0.0, clampf(point.z, -8.2, 7.2))
+
+
+func world_to_screen(world_position: Vector3) -> Vector2:
+	return camera.unproject_position(world_position)
 
 
 func _create_environment() -> void:
