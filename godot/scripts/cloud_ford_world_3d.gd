@@ -1,11 +1,13 @@
 class_name CloudFordWorld3D
 extends SubViewportContainer
 
+const KAYKIT_MEDIEVAL := "res://assets/vendor/kaykit_medieval/"
+
 var world_viewport: SubViewport
 var world_root: Node3D
 var camera: Camera3D
+var camera_rig: IsometricCameraRig3D
 var follow_target: Node3D
-var camera_offset := Vector3(0.0, 15.5, 18.5)
 var combat_vfx: CombatVfx3D
 var environment: Environment
 var sunlight: DirectionalLight3D
@@ -14,9 +16,11 @@ var time_scale := 1.0 / 240.0
 var lantern_lights: Array[OmniLight3D] = []
 var occluder_groups: Array[Dictionary] = []
 var rain: GPUParticles3D
-var camera_shake := 0.0
-var camera_shake_phase := 0.0
 var mechanism_marker: Node3D
+var rest_marker: Node3D
+var rest_marker_label: Label3D
+var rest_marker_ring: MeshInstance3D
+var rest_marker_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -47,30 +51,18 @@ func _create_viewport() -> void:
 	combat_vfx.name = "战斗特效"
 	world_root.add_child(combat_vfx)
 
-	camera = Camera3D.new()
-	camera.position = Vector3(0.0, 15.5, 18.5)
-	camera.fov = 43.0
-	camera.look_at_from_position(camera.position, Vector3(0.2, 0.0, -2.0))
-	world_root.add_child(camera)
+	camera_rig = IsometricCameraRig3D.new()
+	camera_rig.name = "IsometricCameraRig"
+	world_root.add_child(camera_rig)
+	camera = camera_rig.camera
 
 
 func _process(delta: float) -> void:
 	world_time = fposmod(world_time + delta * time_scale, 1.0)
 	_update_environment()
-	if not is_instance_valid(follow_target) or not is_instance_valid(camera):
+	if not is_instance_valid(follow_target):
 		return
 	var focus := follow_target.global_position + Vector3(0.0, 0.0, -1.6)
-	var desired := focus + camera_offset
-	if camera_shake > 0.001:
-		camera_shake_phase += delta * 38.0
-		desired += Vector3(
-			sin(camera_shake_phase * 1.7),
-			cos(camera_shake_phase * 2.3),
-			sin(camera_shake_phase * 2.9)
-		) * camera_shake
-		camera_shake = move_toward(camera_shake, 0.0, delta * 1.35)
-	camera.global_position = camera.global_position.lerp(desired, minf(1.0, delta * 2.8))
-	camera.look_at(focus, Vector3.UP)
 	if is_instance_valid(rain):
 		rain.global_position = focus + Vector3(0, 8, 0)
 	_update_occluders(delta)
@@ -82,10 +74,19 @@ func add_actor(actor: Node3D) -> void:
 
 func set_follow_target(actor: Node3D) -> void:
 	follow_target = actor
+	camera_rig.set_target(actor)
 
 
 func shake_camera(intensity: float) -> void:
-	camera_shake = maxf(camera_shake, intensity)
+	camera_rig.apply_shake(intensity)
+
+
+func zoom_camera(steps: float) -> void:
+	camera_rig.zoom_by_steps(steps)
+
+
+func get_camera_mode_label() -> String:
+	return camera_rig.get_zoom_label()
 
 
 func set_world_time(value: float) -> void:
@@ -130,6 +131,21 @@ func get_location_label() -> String:
 
 func set_mechanism_active(_active: bool) -> void:
 	pass
+
+
+func set_rest_station_hovered(value: bool) -> void:
+	if not is_instance_valid(rest_marker):
+		return
+	if is_instance_valid(rest_marker_ring):
+		rest_marker_ring.scale = Vector3.ONE * (1.18 if value else 1.0)
+	if is_instance_valid(rest_marker_material):
+		rest_marker_material.albedo_color = (
+			Color(0.42, 0.84, 0.58, 0.58)
+			if value
+			else Color(0.35, 0.65, 0.46, 0.34)
+		)
+	if is_instance_valid(rest_marker_label):
+		rest_marker_label.modulate = Color("#fff0a6") if value else Color("#d8e6bc")
 
 
 func screen_to_ground(screen_position: Vector2) -> Vector3:
@@ -219,10 +235,12 @@ func _create_environment() -> void:
 	environment.background_color = Color("#9aab98")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("#d7d1b8")
-	environment.ambient_light_energy = 0.62
+	environment.ambient_light_energy = 0.5
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.tonemap_exposure = 0.88
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#aeb8a4")
-	environment.fog_density = 0.018
+	environment.fog_density = 0.013
 	environment.fog_height = 2.0
 	environment.fog_height_density = 0.12
 	world_environment.environment = environment
@@ -231,7 +249,7 @@ func _create_environment() -> void:
 	sunlight = DirectionalLight3D.new()
 	sunlight.rotation_degrees = Vector3(-54.0, -32.0, 0.0)
 	sunlight.light_color = Color("#f3d8a3")
-	sunlight.light_energy = 1.25
+	sunlight.light_energy = 1.0
 	sunlight.shadow_enabled = true
 	world_root.add_child(sunlight)
 	_update_environment()
@@ -249,17 +267,17 @@ func _update_environment() -> void:
 		world_time * 360.0 - 90.0,
 		0.0
 	)
-	sunlight.light_energy = 0.12 + daylight * 1.25
+	sunlight.light_energy = 0.1 + daylight * 0.94
 	sunlight.light_color = Color("#f2c27f").lerp(Color("#fff0ca"), daylight)
 	environment.background_color = Color("#182735").lerp(Color("#91a899"), daylight)
 	environment.ambient_light_color = Color("#344a5c").lerp(
 		Color("#d7d1b8"), daylight
 	)
-	environment.ambient_light_energy = 0.34 + daylight * 0.42
+	environment.ambient_light_energy = 0.28 + daylight * 0.28
 	environment.fog_light_color = Color("#465c66").lerp(
 		Color("#aeb8a4"), daylight
 	)
-	environment.fog_density = 0.026 - daylight * 0.009 + twilight * 0.006
+	environment.fog_density = 0.021 - daylight * 0.01 + twilight * 0.004
 	var lantern_energy := clampf((0.48 - daylight) * 5.0, 0.0, 1.0) * 2.25
 	for lantern in lantern_lights:
 		if is_instance_valid(lantern):
@@ -291,21 +309,39 @@ func _create_landscape() -> void:
 
 
 func _create_settlement() -> void:
-	_house(Vector3(-8.5, 0.0, -5.7), Vector3(4.1, 2.8, 3.0), Color("#aa9a75"))
-	_house(Vector3(-3.1, 0.0, -6.1), Vector3(3.8, 2.5, 2.8), Color("#988667"))
-	_house(Vector3(3.2, 0.0, -5.8), Vector3(4.4, 3.1, 3.1), Color("#b4a17a"))
-	_house(Vector3(-9.5, 0.0, 4.9), Vector3(3.8, 2.6, 2.9), Color("#9f8c69"))
+	_vendor_building(
+		"临河客栈", "building_tavern_red", Vector3(-8.5, 0.0, -5.7),
+		3.45, 15.0, Vector2(4.9, 4.0)
+	)
+	_vendor_building(
+		"渡口民居", "building_home_A_red", Vector3(-3.1, 0.0, -6.1),
+		3.35, -8.0, Vector2(4.5, 3.8)
+	)
+	_vendor_building(
+		"鲁氏铁铺", "building_blacksmith_red", Vector3(3.2, 0.0, -5.8),
+		3.55, 8.0, Vector2(5.1, 4.2)
+	)
+	_vendor_building(
+		"云津货栈", "building_market_red", Vector3(-9.5, 0.0, 4.9),
+		3.5, 165.0, Vector2(4.7, 4.0)
+	)
 
 	_box("牌坊横梁", Vector3(-0.6, 3.0, -3.8), Vector3(4.2, 0.35, 0.4), Color("#4c3025"))
 	_box("牌坊左柱", Vector3(-2.25, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
 	_box("牌坊右柱", Vector3(1.05, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
 
-	for index in range(5):
-		_box(
-			"摊位%d" % index,
-			Vector3(-6.5 + index * 2.4, 0.55, 1.8 + (index % 2) * 1.4),
-			Vector3(1.4, 1.1, 0.9),
-			Color("#77664b")
+	var market_props := [
+		["crate_long_A", Vector3(-6.8, 0.0, 1.8), 1.45, 10.0],
+		["tent", Vector3(-4.3, 0.0, 3.0), 1.8, -8.0],
+		["crate_open", Vector3(-2.0, 0.0, 1.9), 1.35, 20.0],
+		["barrel", Vector3(2.9, 0.0, 3.1), 1.35, 0.0],
+		["weaponrack", Vector3(4.3, 0.0, 2.3), 1.55, -15.0],
+	]
+	for prop in market_props:
+		_vendor_asset(
+			"集市道具%s" % prop[0],
+			"%sdecoration/props/%s.gltf" % [KAYKIT_MEDIEVAL, prop[0]],
+			prop[1], float(prop[2]), float(prop[3])
 		)
 	var lantern_positions := [
 		Vector3(-2.2, 2.15, -3.4),
@@ -315,6 +351,63 @@ func _create_settlement() -> void:
 	]
 	for index in lantern_positions.size():
 		_create_lantern("灯笼%d" % index, lantern_positions[index])
+	_create_rest_station(Vector3(0.7, 0.0, 4.2))
+
+
+func _create_rest_station(at: Vector3) -> void:
+	rest_marker = Node3D.new()
+	rest_marker.name = "渡口茶棚交互点"
+	rest_marker.position = at
+	world_root.add_child(rest_marker)
+
+	var table := MeshInstance3D.new()
+	table.name = "茶桌"
+	table.position = Vector3(0, 0.52, 0)
+	var table_mesh := CylinderMesh.new()
+	table_mesh.top_radius = 0.48
+	table_mesh.bottom_radius = 0.43
+	table_mesh.height = 0.12
+	table_mesh.material = _material(Color("#654a32"), 0.0, 0.88)
+	table.mesh = table_mesh
+	rest_marker.add_child(table)
+	for x_offset in [-0.28, 0.28]:
+		var cup := MeshInstance3D.new()
+		cup.position = Vector3(x_offset, 0.68, 0)
+		var cup_mesh := CylinderMesh.new()
+		cup_mesh.top_radius = 0.08
+		cup_mesh.bottom_radius = 0.065
+		cup_mesh.height = 0.12
+		cup_mesh.material = _material(Color("#b9ad8c"), 0.0, 0.6)
+		cup.mesh = cup_mesh
+		rest_marker.add_child(cup)
+
+	rest_marker_ring = MeshInstance3D.new()
+	rest_marker_ring.name = "茶棚交互环"
+	rest_marker_ring.position.y = 0.035
+	var ring_mesh := CylinderMesh.new()
+	ring_mesh.top_radius = 0.72
+	ring_mesh.bottom_radius = 0.72
+	ring_mesh.height = 0.025
+	rest_marker_material = StandardMaterial3D.new()
+	rest_marker_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rest_marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rest_marker_material.albedo_color = Color(0.35, 0.65, 0.46, 0.34)
+	ring_mesh.material = rest_marker_material
+	rest_marker_ring.mesh = ring_mesh
+	rest_marker.add_child(rest_marker_ring)
+
+	rest_marker_label = Label3D.new()
+	rest_marker_label.name = "茶棚名牌"
+	rest_marker_label.position = Vector3(0, 1.45, 0)
+	rest_marker_label.text = "茶棚休整"
+	rest_marker_label.font_size = 40
+	rest_marker_label.outline_size = 8
+	rest_marker_label.pixel_size = 0.009
+	rest_marker_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	rest_marker_label.no_depth_test = true
+	rest_marker_label.fixed_size = false
+	rest_marker_label.modulate = Color("#d8e6bc")
+	rest_marker.add_child(rest_marker_label)
 
 
 func _create_nature() -> void:
@@ -325,9 +418,24 @@ func _create_nature() -> void:
 	]
 	for index in tree_positions.size():
 		var at: Vector3 = tree_positions[index]
-		_cylinder("树干%d" % index, at + Vector3(0, 1.05, 0), 0.22, 2.1, Color("#58422f"))
-		_sphere("树冠%d" % index, at + Vector3(0, 2.65, 0), 1.35, Color("#3e6748"))
-		_sphere("树冠侧%d" % index, at + Vector3(0.75, 2.35, 0.1), 0.85, Color("#527657"))
+		var tree_name := "tree_single_A" if index % 2 == 0 else "tree_single_B"
+		_vendor_asset(
+			"河岸古树%d" % index,
+			"%sdecoration/nature/%s.gltf" % [KAYKIT_MEDIEVAL, tree_name],
+			at, 2.45 + float(index % 3) * 0.18, float(index * 37)
+		)
+	var natural_props := [
+		["rock_single_A", Vector3(-10.6, 0.0, 1.8), 1.7, 0.0],
+		["rock_single_D", Vector3(4.9, 0.0, -0.9), 1.45, 80.0],
+		["waterplant_A", Vector3(6.4, -0.03, 5.6), 1.4, 0.0],
+		["waterplant_C", Vector3(7.0, -0.03, -4.7), 1.55, 45.0],
+	]
+	for prop in natural_props:
+		_vendor_asset(
+			"自然道具%s" % prop[0],
+			"%sdecoration/nature/%s.gltf" % [KAYKIT_MEDIEVAL, prop[0]],
+			prop[1], float(prop[2]), float(prop[3])
+		)
 
 
 func _house(at: Vector3, dimensions: Vector3, wall_color: Color) -> void:
@@ -353,10 +461,67 @@ func _house(at: Vector3, dimensions: Vector3, wall_color: Color) -> void:
 	})
 
 
+func _vendor_building(
+	node_name: String,
+	asset_name: String,
+	at: Vector3,
+	uniform_scale: float,
+	yaw_degrees: float,
+	occluder_size: Vector2
+) -> void:
+	var instance := _vendor_asset(
+		node_name,
+		"%sbuildings/red/%s.gltf" % [KAYKIT_MEDIEVAL, asset_name],
+		at,
+		uniform_scale,
+		yaw_degrees
+	)
+	if not is_instance_valid(instance):
+		_house(at, Vector3(occluder_size.x, 2.8, occluder_size.y), Color("#a59270"))
+		return
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(instance, meshes)
+	occluder_groups.append({
+		"center": at,
+		"size": occluder_size,
+		"meshes": meshes,
+	})
+
+
+func _vendor_asset(
+	node_name: String,
+	resource_path: String,
+	at: Vector3,
+	uniform_scale: float,
+	yaw_degrees: float
+) -> Node3D:
+	var scene := load(resource_path) as PackedScene
+	if scene == null:
+		push_warning("未能载入场景资产：%s" % resource_path)
+		return null
+	var instance := scene.instantiate() as Node3D
+	if instance == null:
+		return null
+	instance.name = node_name
+	instance.position = at
+	instance.rotation_degrees.y = yaw_degrees
+	instance.scale = Vector3.ONE * uniform_scale
+	world_root.add_child(instance)
+	return instance
+
+
+func _collect_meshes(node: Node, result: Array[MeshInstance3D]) -> void:
+	if node is MeshInstance3D:
+		result.append(node as MeshInstance3D)
+	for child in node.get_children():
+		_collect_meshes(child, result)
+
+
 func _update_occluders(delta: float) -> void:
-	if not is_instance_valid(follow_target):
+	if not is_instance_valid(follow_target) or not is_instance_valid(camera):
 		return
 	var player_xz := Vector2(follow_target.global_position.x, follow_target.global_position.z)
+	var camera_xz := Vector2(camera.global_position.x, camera.global_position.z)
 	for group in occluder_groups:
 		var center: Vector3 = group["center"]
 		var dimensions: Vector2 = group["size"]
@@ -364,13 +529,36 @@ func _update_occluders(delta: float) -> void:
 			Vector2(center.x, center.z) - dimensions * 0.5,
 			dimensions
 		)
-		var should_fade := area.grow(0.8).has_point(player_xz)
+		var visibility_area := area.grow(0.5)
+		var should_fade: bool = (
+			visibility_area.has_point(player_xz)
+			or _segment_intersects_rect(camera_xz, player_xz, visibility_area)
+		)
 		var target_alpha := 0.58 if should_fade else 0.0
 		for mesh in group["meshes"]:
 			if is_instance_valid(mesh):
 				mesh.transparency = move_toward(
 					mesh.transparency, target_alpha, delta * 2.8
 				)
+
+
+func _segment_intersects_rect(from: Vector2, to: Vector2, area: Rect2) -> bool:
+	if area.has_point(from) or area.has_point(to):
+		return true
+	var top_left := area.position
+	var top_right := area.position + Vector2(area.size.x, 0)
+	var bottom_right := area.end
+	var bottom_left := area.position + Vector2(0, area.size.y)
+	var edges := [
+		[top_left, top_right],
+		[top_right, bottom_right],
+		[bottom_right, bottom_left],
+		[bottom_left, top_left],
+	]
+	for edge in edges:
+		if Geometry2D.segment_intersects_segment(from, to, edge[0], edge[1]) != null:
+			return true
+	return false
 
 
 func _create_lantern(node_name: String, at: Vector3) -> void:

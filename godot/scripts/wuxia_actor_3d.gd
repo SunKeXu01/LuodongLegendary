@@ -3,24 +3,35 @@ extends CharacterBody3D
 
 signal defeated(actor: WuxiaActor3D)
 
+const KAYKIT_ADVENTURERS := "res://assets/vendor/kaykit_adventurers/"
+
 @export var display_name := "江湖客"
 @export var hostile := false
 @export var max_health := 100
 @export var move_speed := 5.0
 @export var attack_power := 12
+@export var actor_level := 1
+@export_enum("hero", "npc", "enemy", "boss") var visual_variant := "npc"
 
 var health: int
 var selected := false:
 	set(value):
 		selected = value
-		if is_instance_valid(selection_disc):
-			selection_disc.visible = value
+		_refresh_interaction_style()
+var hovered := false:
+	set(value):
+		hovered = value
+		_refresh_interaction_style()
 var moving := false
 var combat_target: WuxiaActor3D
 var attack_cooldown := 0.0
 var destination := Vector3.ZERO
 var selection_disc: MeshInstance3D
+var selection_material: StandardMaterial3D
 var nameplate: Label3D
+var status_marker: Label3D
+var health_bar_background: MeshInstance3D
+var health_bar_fill: MeshInstance3D
 var weapon_pivot: Node3D
 var model_root: Node3D
 var left_leg: Node3D
@@ -30,6 +41,7 @@ var right_arm: Node3D
 var animation_player: AnimationPlayer
 var animation_tree: AnimationTree
 var animation_playback: AnimationNodeStateMachinePlayback
+var uses_imported_model := false
 var navigation_agent: NavigationAgent3D
 var patrol_origin := Vector3.ZERO
 var patrol_radius := 0.0
@@ -122,6 +134,15 @@ func set_alerted(value: bool) -> void:
 			if value
 			else Color(0.85, 0.68, 0.25, 0.2)
 		)
+	_refresh_nameplate_style()
+
+
+func set_interaction_marker(marker_text: String, color := Color("#f0c95c")) -> void:
+	if not is_instance_valid(status_marker):
+		return
+	status_marker.text = marker_text
+	status_marker.modulate = color
+	status_marker.visible = not marker_text.is_empty()
 
 
 func take_damage(amount: int) -> void:
@@ -160,6 +181,12 @@ func play_defeat() -> void:
 		selection_disc.visible = false
 	if is_instance_valid(vision_cone):
 		vision_cone.visible = false
+	if is_instance_valid(health_bar_background):
+		health_bar_background.visible = false
+	if is_instance_valid(health_bar_fill):
+		health_bar_fill.visible = false
+	if is_instance_valid(status_marker):
+		status_marker.visible = false
 
 
 func _physics_process(delta: float) -> void:
@@ -222,6 +249,10 @@ func _create_model() -> void:
 	model_root.name = "CharacterModel"
 	add_child(model_root)
 
+	if _create_imported_model():
+		_create_selection_disc()
+		return
+
 	var robe_color := Color("#31584b") if not hostile else Color("#643238")
 	var robe_dark := Color("#203d35") if not hostile else Color("#452329")
 	var robe_trim := Color("#d5bd75") if not hostile else Color("#c78d58")
@@ -256,6 +287,38 @@ func _create_model() -> void:
 	_add_box(weapon_pivot, Vector3(0, -0.38, 0), Vector3(0.065, 0.85, 0.065), Color("#d9d4b9"))
 	_add_box(weapon_pivot, Vector3(0, 0.08, 0), Vector3(0.2, 0.07, 0.1), Color("#745235"))
 
+	_create_selection_disc()
+
+
+func _create_imported_model() -> bool:
+	var model_files := {
+		"hero": "Rogue_Hooded.glb",
+		"npc": "Knight.glb",
+		"enemy": "Barbarian.glb",
+		"boss": "Mage.glb",
+	}
+	var resource_path := "%s%s" % [
+		KAYKIT_ADVENTURERS,
+		model_files.get(visual_variant, "Knight.glb"),
+	]
+	var scene := load(resource_path) as PackedScene
+	if scene == null:
+		return false
+	var imported := scene.instantiate() as Node3D
+	if imported == null:
+		return false
+	imported.name = "KayKitAnimatedModel"
+	imported.rotation_degrees.y = 180.0
+	model_root.add_child(imported)
+	for candidate in imported.find_children("*", "AnimationPlayer", true, false):
+		animation_player = candidate as AnimationPlayer
+		if is_instance_valid(animation_player):
+			break
+	uses_imported_model = is_instance_valid(animation_player)
+	return uses_imported_model
+
+
+func _create_selection_disc() -> void:
 	selection_disc = MeshInstance3D.new()
 	selection_disc.name = "目标选择环"
 	selection_disc.position.y = 0.025
@@ -263,17 +326,20 @@ func _create_model() -> void:
 	disc.top_radius = 0.56
 	disc.bottom_radius = 0.56
 	disc.height = 0.025
-	var disc_material := StandardMaterial3D.new()
-	disc_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	disc_material.albedo_color = Color(0.94, 0.72, 0.24, 0.52)
-	disc_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	disc.material = disc_material
+	selection_material = StandardMaterial3D.new()
+	selection_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	selection_material.albedo_color = Color(0.94, 0.72, 0.24, 0.52)
+	selection_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	disc.material = selection_material
 	selection_disc.mesh = disc
-	selection_disc.visible = selected
+	selection_disc.visible = selected or hovered
 	add_child(selection_disc)
 
 
 func _create_animation_state_machine() -> void:
+	if uses_imported_model:
+		_set_animation_state("idle")
+		return
 	animation_player = AnimationPlayer.new()
 	animation_player.name = "AnimationPlayer"
 	animation_player.root_node = NodePath("..")
@@ -436,14 +502,33 @@ func _add_value_track(
 
 func _create_nameplate() -> void:
 	nameplate = Label3D.new()
-	nameplate.position = Vector3(0, 2.02, 0)
-	nameplate.font_size = 32
-	nameplate.outline_size = 8
-	nameplate.modulate = Color("#f0d8bc") if hostile else Color("#d9edcf")
+	nameplate.position = Vector3(0, 2.08, 0)
+	nameplate.font_size = 38
+	nameplate.outline_size = 7
+	nameplate.pixel_size = 0.008
 	nameplate.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	nameplate.no_depth_test = true
-	nameplate.fixed_size = true
+	nameplate.fixed_size = false
 	add_child(nameplate)
+
+	status_marker = Label3D.new()
+	status_marker.position = Vector3(0, 2.58, 0)
+	status_marker.font_size = 54
+	status_marker.outline_size = 9
+	status_marker.pixel_size = 0.008
+	status_marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	status_marker.no_depth_test = true
+	status_marker.fixed_size = false
+	status_marker.visible = false
+	add_child(status_marker)
+
+	if hostile:
+		health_bar_background = _create_health_bar_part(
+			"气血底条", Vector3(0, 2.3, 0), Vector2(1.12, 0.12), Color("#221819")
+		)
+		health_bar_fill = _create_health_bar_part(
+			"气血填充", Vector3(0, 2.295, 0.001), Vector2(1.04, 0.07), Color("#b3413c")
+		)
 	_refresh_nameplate()
 
 
@@ -451,10 +536,66 @@ func _refresh_nameplate() -> void:
 	if not is_instance_valid(nameplate):
 		return
 	nameplate.text = (
-		"%s  %d/%d" % [display_name, health, max_health]
+		"第%d境 · %s" % [actor_level, display_name]
 		if hostile
 		else display_name
 	)
+	if is_instance_valid(health_bar_fill):
+		var ratio := clampf(float(health) / float(maxi(1, max_health)), 0.0, 1.0)
+		health_bar_fill.scale.x = ratio
+		health_bar_fill.position.x = -0.52 * (1.0 - ratio)
+	_refresh_nameplate_style()
+
+
+func _refresh_nameplate_style() -> void:
+	if not is_instance_valid(nameplate):
+		return
+	if hostile:
+		nameplate.modulate = (
+			Color("#ff8a78")
+			if alerted or selected
+			else (Color("#ffd4aa") if hovered else Color("#e4b7a0"))
+		)
+	else:
+		nameplate.modulate = Color("#f3e49f") if hovered else Color("#d9edcf")
+
+
+func _refresh_interaction_style() -> void:
+	if not is_instance_valid(selection_disc):
+		return
+	selection_disc.visible = selected or hovered
+	if not is_instance_valid(selection_material):
+		return
+	if selected:
+		selection_material.albedo_color = Color(0.95, 0.68, 0.16, 0.68)
+	elif hostile:
+		selection_material.albedo_color = Color(0.88, 0.24, 0.18, 0.48)
+	else:
+		selection_material.albedo_color = Color(0.32, 0.74, 0.55, 0.44)
+	_refresh_nameplate_style()
+
+
+func _create_health_bar_part(
+	node_name: String,
+	at: Vector3,
+	bar_size: Vector2,
+	color: Color
+) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.name = node_name
+	instance.position = at
+	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mesh := QuadMesh.new()
+	mesh.size = bar_size
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	material.no_depth_test = true
+	material.albedo_color = color
+	mesh.material = material
+	instance.mesh = mesh
+	add_child(instance)
+	return instance
 
 
 func _hit_flash() -> void:
@@ -473,6 +614,9 @@ func _finish_action_animation() -> void:
 
 func _set_animation_state(value: String) -> void:
 	animation_state = value
+	if uses_imported_model:
+		_play_imported_animation(value)
+		return
 	if not is_instance_valid(animation_playback):
 		return
 	var state_names := {
@@ -483,6 +627,24 @@ func _set_animation_state(value: String) -> void:
 		"defeated": "Defeated",
 	}
 	animation_playback.travel(state_names.get(value, "Idle"))
+
+
+func _play_imported_animation(state: String) -> void:
+	if not is_instance_valid(animation_player):
+		return
+	var preferred := {
+		"idle": ["Idle"],
+		"run": ["Running_A", "Running_B", "Walking_A"],
+		"attack": ["Attack_Slice", "Attack_Chop", "Attack_Stab"],
+		"hit": ["Hit_A", "Hit_B", "Hit"],
+		"defeated": ["Death_A", "Death_B"],
+	}
+	var available := animation_player.get_animation_list()
+	for requested in preferred.get(state, ["Idle"]):
+		for animation_name in available:
+			if animation_name == requested or animation_name.ends_with("/%s" % requested):
+				animation_player.play(animation_name)
+				return
 
 
 func _limb_pivot(node_name: String, at: Vector3, parent: Node3D) -> Node3D:

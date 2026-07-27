@@ -17,6 +17,24 @@ func _ready() -> void:
 	_expect(GameState.use_item("healing_salve"), "受伤时应能使用金疮药")
 	_expect(GameState.player_health == 72, "金疮药应恢复 32 点气血")
 	_expect(GameState.get_item_count("healing_salve") == 1, "使用后金疮药应减少 1")
+	_expect(GameState.rest_at_tea_stall(), "受伤或内力未满时应能在茶棚休整")
+	_expect(GameState.player_health == 100, "茶棚休整应恢复全部气血")
+	_expect(GameState.player_inner_power == 100, "茶棚休整应恢复全部内力")
+	_expect(not GameState.rest_at_tea_stall(), "状态全满时不应重复执行休整")
+
+	var visual_loot := LootPickup3D.new()
+	visual_loot.configure("cold_iron", "寒铁碎片", 1)
+	add_child(visual_loot)
+	_expect(
+		is_instance_valid(visual_loot.get_node_or_null("掉落表现/掉落光柱")),
+		"3D 掉落物应显示按类型着色的世界光柱"
+	)
+	var loot_nameplate := visual_loot.get_node_or_null("掉落表现/掉落名牌") as Label3D
+	_expect(
+		is_instance_valid(loot_nameplate) and not loot_nameplate.fixed_size,
+		"掉落名牌应随 3D 世界透视缩放而不是固定遮挡屏幕"
+	)
+	visual_loot.queue_free()
 
 	GameState.add_item("monk_bracer")
 	_expect(GameState.equip_item("monk_bracer"), "武僧护腕应能装备")
@@ -119,6 +137,39 @@ func _ready() -> void:
 	var main_scene = load("res://scenes/main.tscn").instantiate()
 	add_child(main_scene)
 	_expect(is_instance_valid(main_scene.get("smith_npc")), "云津渡应生成可交互铁匠鲁三火")
+	var quest_actor = main_scene.get("quest_npc")
+	var smith_actor = main_scene.get("smith_npc")
+	_expect(quest_actor.status_marker.text == "!", "可接任务 NPC 头顶应显示感叹号")
+	_expect(smith_actor.status_marker.text == "锻", "铁匠头顶应显示常驻功能标识")
+	var cloud_world = main_scene.get("world")
+	_expect(is_instance_valid(cloud_world.rest_marker), "云津渡应包含可点击的茶棚休整设施")
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("临河客栈")),
+		"云津渡应载入 KayKit 完整客栈模型而不是程序化方块占位"
+	)
+	var world_player = main_scene.get("player")
+	_expect(world_player.uses_imported_model, "玩家应使用带骨骼动画的外部 GLB 模型")
+	_expect(
+		is_instance_valid(world_player.animation_player)
+		and not world_player.animation_player.get_animation_list().is_empty(),
+		"玩家外部模型应包含可播放的动作"
+	)
+	_expect(
+		cloud_world.camera.projection == Camera3D.PROJECTION_ORTHOGONAL,
+		"正式地图应使用正交斜俯视镜头形成 2.5D 观感"
+	)
+	_expect(cloud_world.camera_rig.target == main_scene.get("player"), "等距镜头应跟随玩家")
+	var camera_size_before_zoom: float = float(cloud_world.camera.size)
+	cloud_world.zoom_camera(1.0)
+	_expect(cloud_world.camera.size > camera_size_before_zoom, "鼠标向下滚动应拉远等距镜头")
+	cloud_world.zoom_camera(-1.0)
+	_expect(
+		cloud_world.call(
+			"_segment_intersects_rect",
+			Vector2(-2, 0), Vector2(2, 0), Rect2(-0.5, -0.5, 1, 1)
+		),
+		"镜头到玩家的射线穿过建筑时应命中遮挡区域"
+	)
 	main_scene.call("_open_smith_window")
 	var smith_window = main_scene.get("active_window")
 	_expect(
@@ -127,6 +178,29 @@ func _ready() -> void:
 	)
 	main_scene.call("_close_active_window")
 	var initial_enemies: Array = main_scene.get("enemies")
+	if not initial_enemies.is_empty():
+		var first_world_enemy = initial_enemies[0]
+		_expect(first_world_enemy.actor_level == 8, "普通敌人头顶境界应与当前章节匹配")
+		_expect(
+			is_instance_valid(first_world_enemy.health_bar_fill),
+			"敌人应生成跟随角色的 3D 世界气血条"
+		)
+		first_world_enemy.take_damage(10)
+		_expect(first_world_enemy.health_bar_fill.scale.x < 1.0, "受伤后世界气血条应即时缩短")
+		first_world_enemy.restore_health(first_world_enemy.max_health)
+		first_world_enemy.hovered = true
+		_expect(first_world_enemy.selection_disc.visible, "鼠标悬停敌人时应显示 3D 交互环")
+		first_world_enemy.hovered = false
+	GameState.damage_player(35)
+	GameState.spend_inner_power(30)
+	main_scene.call("_command_use_rest_station")
+	world_player.global_position = cloud_world.rest_marker.global_position + Vector3(0.5, 0, 0.3)
+	main_scene.call("_update_pending_interactions")
+	_expect(GameState.player_health == GameState.player_max_health, "玩家靠近茶棚后应恢复全部气血")
+	_expect(
+		GameState.player_inner_power == GameState.player_max_inner_power,
+		"玩家靠近茶棚后应恢复全部内力"
+	)
 	for enemy in initial_enemies:
 		enemy.queue_free()
 	initial_enemies.clear()

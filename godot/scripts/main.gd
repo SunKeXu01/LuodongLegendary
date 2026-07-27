@@ -23,6 +23,7 @@ var loot_drops: Array[LootPickup3D] = []
 var pending_loot: LootPickup3D
 var pending_npc: WuxiaActor3D
 var pending_mechanism: Node3D
+var pending_map_interaction: Node3D
 var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
@@ -37,6 +38,8 @@ var quest_description_label: Label
 var message_label: Label
 var target_label: Label
 var target_health_bar: ProgressBar
+var hover_hint_panel: Panel
+var hover_hint_label: Label
 var skill_buttons: Array[Button] = []
 var qinggong_time := 0.0
 var queued_skill := ""
@@ -63,6 +66,7 @@ var boss_telegraph_total := 0.0
 var boss_telegraph_radius := 0.0
 var boss_telegraph_origin := Vector3.ZERO
 var boss_telegraph: MeshInstance3D
+var hovered_actor: WuxiaActor3D
 
 
 func _ready() -> void:
@@ -106,6 +110,7 @@ func _create_background() -> void:
 func _create_player() -> void:
 	player = Actor.new()
 	player.display_name = "青冥门少侠"
+	player.visual_variant = "hero"
 	player.max_health = GameState.player_max_health
 	player.position = (
 		Vector3(0.0, 0.0, 6.0)
@@ -168,6 +173,15 @@ func _spawn_enemy_wave(specs: Array) -> void:
 		enemy.position = spec[1]
 		enemy.max_health = spec[2]
 		enemy.attack_power = int(spec[3]) if spec.size() > 3 else 12
+		enemy.actor_level = GameState.player_level
+		if enemy.display_name == "寂音院主·法砚":
+			enemy.actor_level += 2
+			enemy.visual_variant = "boss"
+		elif enemy.max_health >= 112:
+			enemy.actor_level += 1
+			enemy.visual_variant = "enemy"
+		else:
+			enemy.visual_variant = "enemy"
 		enemy.hostile = true
 		enemy.move_speed = 3.2
 		enemy.defeated.connect(_on_enemy_defeated)
@@ -187,6 +201,7 @@ func _create_quest_npc() -> void:
 		quest_npc.display_name = "渡口巡检·沈砚"
 		quest_npc.position = Vector3(-4.5, 0.0, 1.2)
 	quest_npc.move_speed = 4.0
+	quest_npc.visual_variant = "npc"
 	world.add_actor(quest_npc)
 	if current_zone == "silent_temple":
 		smith_npc = null
@@ -196,6 +211,7 @@ func _create_quest_npc() -> void:
 	else:
 		smith_npc = Actor.new()
 		smith_npc.display_name = "渡口铁匠·鲁三火"
+		smith_npc.visual_variant = "enemy"
 		smith_npc.position = Vector3(-5.8, 0.0, 4.6)
 		smith_npc.move_speed = 4.0
 		world.add_actor(smith_npc)
@@ -289,7 +305,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mouse_event := event as InputEventMouseButton
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+	if not mouse_event.pressed:
+		return
+	if mouse_event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		var zoom_step := -1.0 if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
+		world.zoom_camera(zoom_step)
+		GameState.set_message("镜头缩放｜%s" % world.get_camera_mode_label())
+		return
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var click: Vector2 = mouse_event.position
 	if current_zone == "silent_temple" and is_instance_valid(world.mechanism_marker):
@@ -333,6 +356,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if enemy_screen.distance_to(click) <= 42.0:
 			_select_enemy(enemy)
 			return
+	if current_zone == "cloud_ford" and is_instance_valid(world.rest_marker):
+		var rest_screen := world.world_to_screen(
+			world.rest_marker.global_position + Vector3(0, 0.75, 0)
+		)
+		if rest_screen.distance_to(click) <= 52.0:
+			_command_use_rest_station()
+			return
 	_clear_target()
 	_command_player(click)
 
@@ -341,6 +371,7 @@ func _command_player(click: Vector2) -> void:
 	pending_loot = null
 	pending_npc = null
 	pending_mechanism = null
+	pending_map_interaction = null
 	var destination := world.screen_to_ground(click)
 	player.command_move(destination)
 	world.show_move_marker(destination)
@@ -351,6 +382,7 @@ func _select_enemy(enemy: WuxiaActor3D) -> void:
 	pending_loot = null
 	pending_npc = null
 	pending_mechanism = null
+	pending_map_interaction = null
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
 		selected_enemy.combat_target = null
@@ -395,6 +427,7 @@ func _physics_process(delta: float) -> void:
 		if qinggong_time <= 0.0:
 			player.move_speed = 5.0
 	_update_pending_interactions()
+	_update_hover_feedback()
 	_update_player_combat()
 	_update_enemy_combat()
 	_update_dungeon_hazards()
@@ -410,6 +443,7 @@ func _command_collect_loot(loot: LootPickup3D) -> void:
 	_clear_target()
 	pending_npc = null
 	pending_mechanism = null
+	pending_map_interaction = null
 	pending_loot = loot
 	player.command_move(loot.global_position)
 	world.show_move_marker(loot.global_position)
@@ -420,6 +454,7 @@ func _command_talk_to_npc(npc: WuxiaActor3D) -> void:
 	_clear_target()
 	pending_loot = null
 	pending_mechanism = null
+	pending_map_interaction = null
 	pending_npc = npc
 	var approach := npc.global_position + npc.global_position.direction_to(player.global_position) * 1.15
 	player.command_move(approach)
@@ -432,11 +467,27 @@ func _command_use_mechanism() -> void:
 	_clear_target()
 	pending_loot = null
 	pending_npc = null
+	pending_map_interaction = null
 	pending_mechanism = world.mechanism_marker
 	var approach := pending_mechanism.global_position + Vector3(0.9, 0, 0.4)
 	player.command_move(approach)
 	world.show_move_marker(approach)
 	GameState.set_message("正在靠近机关总闸。")
+
+
+func _command_use_rest_station() -> void:
+	if current_zone != "cloud_ford" or not is_instance_valid(world.rest_marker):
+		return
+	_close_active_window()
+	_clear_target()
+	pending_loot = null
+	pending_npc = null
+	pending_mechanism = null
+	pending_map_interaction = world.rest_marker
+	var approach := world.rest_marker.global_position + Vector3(0.95, 0, 0.65)
+	player.command_move(approach)
+	world.show_move_marker(approach)
+	GameState.set_message("正在前往渡口茶棚休整。")
 
 
 func _update_pending_interactions() -> void:
@@ -467,6 +518,15 @@ func _update_pending_interactions() -> void:
 			AudioManager.play_quest()
 			world.shake_camera(0.16)
 			_save_current_game()
+		return
+	if is_instance_valid(pending_map_interaction):
+		if player.global_position.distance_to(pending_map_interaction.global_position) <= 1.45:
+			player.stop()
+			pending_map_interaction = null
+			if GameState.rest_at_tea_stall():
+				AudioManager.play_quest()
+				world.shake_camera(0.08)
+				_save_current_game()
 
 
 func _temple_guards_alerted() -> bool:
@@ -879,6 +939,17 @@ func _create_hud() -> void:
 	target_health_bar.add_theme_stylebox_override("fill", _style(Color("#9f3634"), 3))
 	target_panel.add_child(target_health_bar)
 
+	hover_hint_panel = _panel(
+		Vector2(476, 140), Vector2(328, 34), Color(0.025, 0.035, 0.03, 0.88)
+	)
+	hover_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hover_hint_panel.visible = false
+	hud.add_child(hover_hint_panel)
+	hover_hint_label = _add_label(
+		hover_hint_panel, "", Vector2(10, 6), Vector2(308, 22),
+		13, Color("#ead79b"), true
+	)
+
 	minimap = Minimap.new()
 	minimap.position = Vector2(1070, 16)
 	minimap.size = Vector2(190, 190)
@@ -970,6 +1041,7 @@ func _refresh_hud() -> void:
 	else:
 		_refresh_cloud_ford_hud()
 	message_label.text = GameState.message
+	_refresh_world_markers()
 	for button in skill_buttons:
 		var skill_name := str(button.get_meta("skill_name"))
 		var selected := (
@@ -978,6 +1050,101 @@ func _refresh_hud() -> void:
 		)
 		button.modulate = Color.WHITE if selected else Color(0.72, 0.72, 0.67)
 	_refresh_skill_buttons()
+
+
+func _refresh_world_markers() -> void:
+	if is_instance_valid(smith_npc):
+		smith_npc.set_interaction_marker("锻", Color("#ed9b4b"))
+	if not is_instance_valid(quest_npc):
+		return
+	var marker := ""
+	var color := Color("#e5c35b")
+	if current_zone == "silent_temple":
+		match GameState.dungeon_state:
+			"rescue":
+				marker = "!"
+			"ending":
+				marker = "?"
+			"completed":
+				marker = "归"
+				color = Color("#8fc9a4")
+	else:
+		match GameState.quest_state:
+			"available", "followup_available":
+				marker = "!"
+			"ready", "second_ready":
+				marker = "?"
+			"completed":
+				if GameState.dungeon_state != "completed":
+					marker = "!"
+	quest_npc.set_interaction_marker(marker, color)
+
+
+func _update_hover_feedback() -> void:
+	if is_instance_valid(active_window):
+		if current_zone == "cloud_ford":
+			world.set_rest_station_hovered(false)
+		_set_hovered_actor(null)
+		return
+	var pointer := get_viewport().get_mouse_position()
+	var nearest: WuxiaActor3D
+	var nearest_distance := 9999.0
+	var candidates: Array[WuxiaActor3D] = []
+	if is_instance_valid(smith_npc):
+		candidates.append(smith_npc)
+	if is_instance_valid(quest_npc):
+		candidates.append(quest_npc)
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			candidates.append(enemy)
+	for actor in candidates:
+		var screen_position := world.world_to_screen(
+			actor.global_position + Vector3(0, 1.0, 0)
+		)
+		var distance := screen_position.distance_to(pointer)
+		if distance <= 48.0 and distance < nearest_distance:
+			nearest = actor
+			nearest_distance = distance
+	if is_instance_valid(nearest):
+		if current_zone == "cloud_ford":
+			world.set_rest_station_hovered(false)
+		_set_hovered_actor(nearest)
+		return
+	_set_hovered_actor(null)
+	if current_zone == "cloud_ford" and is_instance_valid(world.rest_marker):
+		var rest_screen := world.world_to_screen(
+			world.rest_marker.global_position + Vector3(0, 0.75, 0)
+		)
+		if rest_screen.distance_to(pointer) <= 52.0:
+			world.set_rest_station_hovered(true)
+			hover_hint_panel.visible = true
+			hover_hint_label.text = "左键使用｜渡口茶棚休整"
+			Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
+			return
+		world.set_rest_station_hovered(false)
+
+
+func _set_hovered_actor(actor: WuxiaActor3D) -> void:
+	if is_instance_valid(hovered_actor) and hovered_actor != actor:
+		hovered_actor.hovered = false
+	hovered_actor = actor
+	if not is_instance_valid(hovered_actor):
+		hovered_actor = null
+		if is_instance_valid(hover_hint_panel):
+			hover_hint_panel.visible = false
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
+	hovered_actor.hovered = true
+	hover_hint_panel.visible = true
+	Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
+	if hovered_actor.hostile:
+		hover_hint_label.text = "左键锁定｜第%d境 · %s" % [
+			hovered_actor.actor_level, hovered_actor.display_name
+		]
+	elif hovered_actor == smith_npc:
+		hover_hint_label.text = "左键交谈｜淬炼兵刃"
+	else:
+		hover_hint_label.text = "左键交谈｜%s" % hovered_actor.display_name
 
 
 func _refresh_cloud_ford_hud() -> void:
@@ -1574,6 +1741,7 @@ func _switch_zone(zone_id: String) -> void:
 	if zone_id == current_zone or zone_id not in ["cloud_ford", "silent_temple"]:
 		return
 	_clear_target()
+	_set_hovered_actor(null)
 	_clear_boss_telegraph()
 	boss_phase = 0
 	boss_skill_cooldown = 3.0
@@ -1581,6 +1749,7 @@ func _switch_zone(zone_id: String) -> void:
 	pending_loot = null
 	pending_npc = null
 	pending_mechanism = null
+	pending_map_interaction = null
 	var old_world := world
 	enemies.clear()
 	loot_drops.clear()

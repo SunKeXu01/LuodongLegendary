@@ -129,6 +129,17 @@ func restore_inner_power(amount: int) -> void:
 	state_changed.emit()
 
 
+func rest_at_tea_stall() -> bool:
+	if player_health >= player_max_health and player_inner_power >= player_max_inner_power:
+		set_message("气血与内力均已充盈，暂时无需休整。")
+		return false
+	player_health = player_max_health
+	player_inner_power = player_max_inner_power
+	message = "在渡口茶棚歇息片刻，气血与内力已经完全恢复。"
+	state_changed.emit()
+	return true
+
+
 func add_item(item_id: String, amount := 1) -> void:
 	if not ITEM_DEFINITIONS.has(item_id) or amount <= 0:
 		return

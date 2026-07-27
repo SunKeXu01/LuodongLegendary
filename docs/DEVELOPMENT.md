@@ -6,6 +6,7 @@
 
 - `godot/scenes/main.tscn`：Godot 正式客户端入口。
 - `godot/scripts/main.gd`：鼠标指令、自动追击战斗和网游式 HUD。
+- `godot/scripts/isometric_camera_rig_3d.gd`：移植并扩展的正交等距镜头、缩放、跟随与震动。
 - `godot/scripts/wuxia_actor_3d.gd`：有关节的低多边形武侠角色、动画状态机、移动与战斗。
 - `godot/scripts/cloud_ford_world_3d.gd`：云津渡实时 3D 场景、昼夜细雨、遮挡渐隐、镜头反馈与鼠标射线换算。
 - `godot/scripts/silent_temple_world_3d.gd`：寂音禅院独立地图、夜雨、牢房、机关踏板、总闸与导航区域。
@@ -45,6 +46,16 @@
 稳定提升至 `+5`，每级增加 2 点外功攻击。淬炼没有随机失败或装备损坏；
 资源不足时不扣除任何物品。强化等级会同步到背包、角色面板与存档。
 
+正式地图使用正交斜俯视相机形成 2.5D 网游观感，但底层仍是完整 3D：
+角色使用 `CharacterBody3D`，移动使用 `NavigationAgent3D`，地图、光照、
+雨雾、碰撞和技能表现均在 3D 世界中结算。鼠标滚轮调整镜头距离；NPC
+任务/功能标识、敌人境界与气血条、掉落光柱会随世界透视缩放。建筑位于
+摄像机与玩家之间时会渐隐。
+
+云津渡茶棚是首个通用地图设施交互：鼠标命中只提交意图，玩家先通过导航
+接近设施，进入 1.45 丈范围后才执行休整并恢复气血、内力。NPC、敌人、
+机关、掉落和茶棚都遵循同一套“命中—寻路—距离校验—结算”结构。
+
 ## 本地运行
 
 安装 Godot 4.7.1 .NET 版本和 .NET 8 SDK 后：
@@ -71,7 +82,7 @@ godot --headless --path godot --export-release "Windows Desktop" \
 在 Windows 上使用 Inno Setup 6 生成安装包：
 
 ```bash
-iscc /DMyAppVersion=0.4.2 installer/luodong-legendary.iss
+iscc /DMyAppVersion=0.5.0 installer/luodong-legendary.iss
 ```
 
 安装包允许玩家选择安装位置，并使用 LZMA2 固实压缩。网络功能仍不在

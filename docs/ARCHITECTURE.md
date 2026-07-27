@@ -22,6 +22,10 @@ Godot 4.7.1，不再依赖浏览器或 Electron 运行。
 
 ```text
 Godot 4.7.1
+  ├─ IsometricCameraRig3D
+  │   ├─ 正交斜俯视 2.5D 投影与阻尼跟随
+  │   ├─ 鼠标滚轮有界缩放
+  │   └─ 确定性战斗镜头震动
   ├─ C# Gameplay Core
   │   ├─ PlayerCommand 玩家意图边界
   │   └─ CombatRules 确定性战斗规则
@@ -34,11 +38,12 @@ Godot 4.7.1
   │       └─ 内力消耗、战斗/脱战恢复与技能反馈
   ├─ CloudFordWorld3D
   │   ├─ SubViewport 实时 3D 世界
-  │   ├─ 斜视角平滑镜头跟随
+  │   ├─ 接入独立等距镜头节点
   │   ├─ 可保存昼夜、薄雾细雨与夜间灯笼
-  │   ├─ 建筑遮挡渐隐与战斗镜头震动
+  │   ├─ 摄像机—玩家射线驱动建筑遮挡渐隐
   │   ├─ 屏幕坐标与世界坐标转换
   │   ├─ NavigationMesh 建筑绕障区域
+  │   ├─ 可点击茶棚设施与交互距离结算
   │   └─ CombatVfx3D 技能与移动反馈
   ├─ SilentTempleWorld3D
   │   ├─ 复用世界渲染、点击寻路和镜头接口
@@ -52,7 +57,7 @@ Godot 4.7.1
   │   ├─ 守卫视野扇形、朝向判定与警戒着色
   │   ├─ NavigationAgent3D 路径移动
   │   ├─ 巡逻、警戒、追击和脱战
-  │   └─ 名牌、选中环、攻击和受击表现
+  │   └─ 透视缩放名牌、任务标识、世界血条、悬停环与仇恨着色
   └─ GameState
       ├─ 气血、内力、攻击、防御与武学状态
       ├─ 内力消费、恢复与上限约束
@@ -70,6 +75,10 @@ Windows 发布
   ├─ Godot Windows x64 EXE + PCK
   └─ Inno Setup LZMA2 安装包
 ```
+
+等距镜头与交互职责参考并改写自 `marinho/isometric-3d-toolkit`
+（CC BY 4.0，固定提交 `95d3507`）。完整选型、改写范围和内容边界见
+`docs/ISOMETRIC_3D_PORT.md`。
 
 当前保持离线单机。云津渡与寂音禅院已经通过统一世界接口切换，当前区域、
 区域内敌人、掉落和副本阶段会一起保存。场景、实体、状态与 UI 已分层，

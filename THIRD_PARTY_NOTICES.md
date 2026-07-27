@@ -19,6 +19,50 @@
 
 The current project is an original Ming-era wuxia game and is not affiliated with the Legend of Mir / Mir franchise.
 
+## marinho/isometric-3d-toolkit
+
+- Source: <https://github.com/marinho/isometric-3d-toolkit>
+- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- Creator: Mario Brandao (`marinho`)
+- Source commit: `95d3507560f80e44a8eb67f40807185c8d0b10fb`
+- Files studied and adapted: `src/camera/IsometricCamera3D.cs`,
+  `src/camera/CameraShaker.cs`, `src/core/VisibilitySwitcher.cs` and
+  `src/interactions/ActivatorArea.cs`
+- Actual use: `godot/scripts/isometric_camera_rig_3d.gd` translates and expands
+  the upstream isometric camera / camera-shake structure into GDScript. It adds
+  orthographic 2.5D projection, damped target following, bounded mouse-wheel zoom
+  and deterministic shake. The world occlusion and interaction code applies the
+  upstream visibility/activation separation to original cloud-ford buildings,
+  NPCs, enemies and the tea-stall rest point.
+- Changes: translated from C# to GDScript, removed dependencies on the upstream
+  player and signal managers, and integrated with this project's existing
+  NavigationAgent3D, mouse-command and save-state systems.
+
+License text: <https://creativecommons.org/licenses/by/4.0/legalcode>
+
+No artwork, particles, audio, characters, maps or story content from
+`isometric-3d-toolkit` is included. Ming-era names, maps and story remain original;
+the separately licensed CC0 visual assets used by the map are listed below.
+
+## KayKit Medieval Hexagon Pack 1.0
+
+- Author: Kay Lousberg / KayKit
+- Source: <https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0>
+- Pinned commit: `84fa4e91af6a88989be7c99e0891cede11f2ca38`
+- License: Creative Commons Zero 1.0
+- Used assets: selected red-roof buildings, neutral structures, nature models
+  and props for the Cloud Ford map.
+
+## KayKit Character Pack: Adventures 1.0
+
+- Author: Kay Lousberg / KayKit
+- Source: <https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0>
+- Pinned commit: `672074b73ba276876a19e8816ecdc5241817ab47`
+- License: Creative Commons Zero 1.0
+- Used assets: Rogue Hooded, Knight, Barbarian and Mage animated GLB models.
+
+License text: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
+
 ## remarkablegames/phaser-rpg
 
 - Source: <https://github.com/remarkablegames/phaser-rpg>
