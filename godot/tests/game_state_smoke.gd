@@ -30,6 +30,31 @@ func _ready() -> void:
 	_expect(GameState.get_attack() == 24, "装备玉符后攻击应为 24")
 	_expect(GameState.get_defense() == 10, "装备玉符后防御应为 10")
 
+	var test_save_path := "user://automated_state_test.json"
+	var snapshot := {
+		"player_position": [1.0, 0.0, 2.0],
+		"enemies": [],
+		"loot": [{"item_id": "cold_iron", "amount": 1, "position": [2.0, 0.0, 3.0]}],
+	}
+	_expect(GameState.save_game(snapshot, test_save_path), "游戏状态应能写入存档")
+	GameState.reset()
+	var restored := GameState.load_game(test_save_path)
+	_expect(GameState.quest_state == "completed", "读取存档后任务状态应恢复")
+	_expect(GameState.silver == 50, "读取存档后碎银应恢复")
+	_expect(restored.get("loot", []).size() == 1, "读取存档后地面掉落应恢复")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_save_path))
+
+	var test_settings_path := "user://automated_settings_test.json"
+	GameState.master_volume = 0.4
+	GameState.fullscreen = true
+	_expect(GameState.save_settings(test_settings_path), "设置应能写入文件")
+	GameState.master_volume = 1.0
+	GameState.fullscreen = false
+	GameState.load_settings(test_settings_path)
+	_expect(is_equal_approx(GameState.master_volume, 0.4), "读取后音量应恢复")
+	_expect(GameState.fullscreen, "读取后全屏设置应恢复")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_settings_path))
+
 	if failures.is_empty():
 		print("GAMEPLAY STATE SMOKE TEST PASSED")
 		get_tree().quit(0)

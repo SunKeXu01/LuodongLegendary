@@ -25,6 +25,9 @@ const ITEM_DEFINITIONS := {
 		"description": "沈砚赠予的青玉信物，刻有青冥云纹。"
 	},
 }
+const SAVE_VERSION := 1
+const SAVE_PATH := "user://luodong_save.json"
+const SETTINGS_PATH := "user://luodong_settings.json"
 
 var player_health: int = 100
 var player_max_health: int = 100
@@ -41,6 +44,14 @@ var quest_state: String = "available"
 var inventory: Array[Dictionary] = []
 var equipment := {"weapon": "", "armor": "", "accessory": ""}
 var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
+var master_volume := 0.72
+var fullscreen := false
+var load_requested := false
+
+
+func _ready() -> void:
+	load_settings()
+	apply_settings()
 
 
 func reset() -> void:
@@ -166,6 +177,128 @@ func finish_quest() -> void:
 	add_silver(50)
 	add_item("qingming_charm", 1)
 	set_message("任务完成：获得碎银 50 两与青冥玉符。")
+
+
+func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
+	var payload := {
+		"version": SAVE_VERSION,
+		"saved_at": Time.get_datetime_string_from_system(),
+		"player": {
+			"health": player_health,
+			"inner_power": player_inner_power,
+			"experience": player_experience,
+			"level": player_level,
+			"silver": silver,
+			"selected_skill": selected_skill,
+		},
+		"quest": {
+			"text": quest_text,
+			"state": quest_state,
+		},
+		"inventory": inventory.duplicate(true),
+		"equipment": equipment.duplicate(true),
+		"world": world_snapshot.duplicate(true),
+	}
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(JSON.stringify(payload, "\t"))
+	return true
+
+
+func load_game(path := SAVE_PATH) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary) or int(parsed.get("version", 0)) != SAVE_VERSION:
+		return {}
+	var player_data: Dictionary = parsed.get("player", {})
+	player_health = clampi(int(player_data.get("health", 100)), 0, player_max_health)
+	player_inner_power = clampi(
+		int(player_data.get("inner_power", 82)), 0, player_max_inner_power
+	)
+	player_experience = int(player_data.get("experience", 36))
+	player_level = int(player_data.get("level", 8))
+	silver = int(player_data.get("silver", 0))
+	selected_skill = str(player_data.get("selected_skill", "青冥剑式"))
+	var quest_data: Dictionary = parsed.get("quest", {})
+	quest_text = str(quest_data.get("text", "拜访渡口巡检"))
+	quest_state = str(quest_data.get("state", "available"))
+	inventory.assign(parsed.get("inventory", []))
+	equipment = parsed.get(
+		"equipment", {"weapon": "worn_sword", "armor": "", "accessory": ""}
+	).duplicate(true)
+	message = "存档读取成功，江湖历程已经恢复。"
+	inventory_changed.emit()
+	state_changed.emit()
+	return parsed.get("world", {}).duplicate(true)
+
+
+func has_save(path := SAVE_PATH) -> bool:
+	return FileAccess.file_exists(path)
+
+
+func request_load() -> void:
+	load_requested = true
+
+
+func consume_load_request() -> bool:
+	var requested := load_requested
+	load_requested = false
+	return requested
+
+
+func save_settings(path := SETTINGS_PATH) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(JSON.stringify({
+		"master_volume": master_volume,
+		"fullscreen": fullscreen,
+	}, "\t"))
+	return true
+
+
+func load_settings(path := SETTINGS_PATH) -> void:
+	if not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not (parsed is Dictionary):
+		return
+	master_volume = clampf(float(parsed.get("master_volume", 0.72)), 0.0, 1.0)
+	fullscreen = bool(parsed.get("fullscreen", false))
+
+
+func apply_settings() -> void:
+	AudioServer.set_bus_volume_db(
+		AudioServer.get_bus_index("Master"),
+		linear_to_db(maxf(0.001, master_volume))
+	)
+	DisplayServer.window_set_mode(
+		DisplayServer.WINDOW_MODE_FULLSCREEN
+		if fullscreen
+		else DisplayServer.WINDOW_MODE_WINDOWED
+	)
+
+
+func set_master_volume(value: float) -> void:
+	master_volume = clampf(value, 0.0, 1.0)
+	apply_settings()
+	save_settings()
+	state_changed.emit()
+
+
+func toggle_fullscreen() -> void:
+	fullscreen = not fullscreen
+	apply_settings()
+	save_settings()
+	state_changed.emit()
 
 
 func _equipment_bonus(stat_name: String) -> int:

@@ -31,14 +31,22 @@ var qinggong_time := 0.0
 var heal_cooldown := 0.0
 var hud_layer: CanvasLayer
 var active_window: Panel
+var restored_world: Dictionary = {}
 
 
 func _ready() -> void:
-	GameState.reset()
+	if GameState.consume_load_request():
+		restored_world = GameState.load_game()
+		if restored_world.is_empty():
+			GameState.reset()
+	else:
+		GameState.reset()
+	GameState.apply_settings()
 	_create_background()
 	_create_player()
 	_create_enemies()
 	_create_quest_npc()
+	_apply_world_snapshot()
 	_create_hud()
 	GameState.state_changed.connect(_refresh_hud)
 	GameState.inventory_changed.connect(_refresh_active_window)
@@ -91,6 +99,87 @@ func _create_quest_npc() -> void:
 	quest_npc.position = Vector3(-4.5, 0.0, 1.2)
 	quest_npc.move_speed = 4.0
 	world.add_actor(quest_npc)
+
+
+func _apply_world_snapshot() -> void:
+	if restored_world.is_empty():
+		return
+	var player_position = restored_world.get("player_position", [])
+	if player_position is Array and player_position.size() == 3:
+		player.global_position = _array_to_vector(player_position)
+
+	if restored_world.has("enemies"):
+		var saved_by_name := {}
+		for saved_enemy in restored_world.get("enemies", []):
+			saved_by_name[str(saved_enemy.get("name", ""))] = saved_enemy
+		for enemy in enemies.duplicate():
+			if not saved_by_name.has(enemy.display_name):
+				enemies.erase(enemy)
+				enemy.queue_free()
+				continue
+			var saved: Dictionary = saved_by_name[enemy.display_name]
+			enemy.global_position = _array_to_vector(saved.get("position", []))
+			enemy.restore_health(int(saved.get("health", enemy.max_health)))
+			enemy.patrol_origin = enemy.global_position
+
+	for saved_loot in restored_world.get("loot", []):
+		var item_id := str(saved_loot.get("item_id", ""))
+		if not GameState.ITEM_DEFINITIONS.has(item_id):
+			continue
+		var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
+		var loot: LootPickup3D = LootPickup.new()
+		loot.configure(
+			item_id,
+			str(definition["name"]),
+			int(saved_loot.get("amount", 1))
+		)
+		loot.position = _array_to_vector(saved_loot.get("position", []))
+		world.add_actor(loot)
+		loot_drops.append(loot)
+
+
+func _world_snapshot() -> Dictionary:
+	var enemy_data: Array[Dictionary] = []
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.health <= 0:
+			continue
+		enemy_data.append({
+			"name": enemy.display_name,
+			"health": enemy.health,
+			"position": _vector_to_array(enemy.global_position),
+		})
+	var loot_data: Array[Dictionary] = []
+	for loot in loot_drops:
+		if not is_instance_valid(loot):
+			continue
+		loot_data.append({
+			"item_id": loot.item_id,
+			"amount": loot.amount,
+			"position": _vector_to_array(loot.global_position),
+		})
+	return {
+		"player_position": _vector_to_array(player.global_position),
+		"enemies": enemy_data,
+		"loot": loot_data,
+	}
+
+
+func _vector_to_array(value: Vector3) -> Array[float]:
+	return [value.x, value.y, value.z]
+
+
+func _array_to_vector(value: Array) -> Vector3:
+	if value.size() != 3:
+		return Vector3.ZERO
+	return Vector3(float(value[0]), float(value[1]), float(value[2]))
+
+
+func _save_current_game(notify := false) -> void:
+	if GameState.save_game(_world_snapshot()):
+		if notify:
+			GameState.set_message("游戏进度已经保存。")
+	else:
+		GameState.set_message("保存失败，请检查游戏数据目录的写入权限。")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -208,11 +297,14 @@ func _update_pending_interactions() -> void:
 
 func _collect_loot(loot: LootPickup3D) -> void:
 	var item_name := loot.item_name
+	var amount := loot.amount
 	GameState.add_item(loot.item_id, loot.amount)
 	loot_drops.erase(loot)
 	pending_loot = null
 	loot.queue_free()
-	GameState.set_message("拾取%s ×%d，已放入背包。" % [item_name, loot.amount])
+	AudioManager.play_pickup()
+	GameState.set_message("拾取%s ×%d，已放入背包。" % [item_name, amount])
+	_save_current_game()
 
 
 func _update_player_combat() -> void:
@@ -245,6 +337,7 @@ func _update_player_combat() -> void:
 		damage = roundi(float(GameState.get_attack()) * 0.85)
 	var target := selected_enemy
 	target.take_damage(damage)
+	AudioManager.play_hit()
 	_show_damage(
 		target.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
 	)
@@ -284,6 +377,7 @@ func _update_enemy_combat() -> void:
 			world.play_skill_effect("敌人反击", enemy.global_position, player.global_position)
 			var enemy_damage := maxi(1, 12 - GameState.get_defense())
 			GameState.damage_player(enemy_damage)
+			AudioManager.play_hit()
 			_show_damage(
 				player.global_position + Vector3(0, 1.8, 0),
 				enemy_damage,
@@ -321,6 +415,7 @@ func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 	target_health_bar.value = 0
 	if enemies.is_empty():
 		GameState.mark_quest_ready()
+	_save_current_game()
 
 
 func _spawn_loot(enemy_name: String, at: Vector3) -> void:
@@ -477,9 +572,9 @@ func _create_hud() -> void:
 		menu.add_theme_font_size_override("font_size", 12)
 		menu.pressed.connect(_open_system_panel.bind(menu_names[index]))
 
-	var restart := _button(currency, "重整江湖", Vector2(71, 51), Vector2(97, 34))
-	restart.add_theme_font_size_override("font_size", 12)
-	restart.pressed.connect(_restart_game)
+	var system := _button(currency, "系统", Vector2(71, 51), Vector2(97, 34))
+	system.add_theme_font_size_override("font_size", 12)
+	system.pressed.connect(_open_system_window)
 
 
 func _refresh_hud() -> void:
@@ -673,6 +768,7 @@ func _handle_inventory_item(item_id: String) -> void:
 		GameState.equip_item(item_id)
 	else:
 		GameState.set_message("%s是锻造材料，暂时无法直接使用。" % definition["name"])
+	_save_current_game()
 
 
 func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
@@ -712,6 +808,8 @@ func _accept_quest() -> void:
 	GameState.accept_quest()
 	if enemies.is_empty():
 		GameState.mark_quest_ready()
+	AudioManager.play_quest()
+	_save_current_game()
 	_close_active_window()
 
 
@@ -720,6 +818,8 @@ func _turn_in_quest() -> void:
 		return
 	_close_active_window()
 	GameState.finish_quest()
+	AudioManager.play_quest()
+	_save_current_game()
 
 
 func _window(
@@ -750,6 +850,70 @@ func _refresh_active_window() -> void:
 	if window_type in ["背包", "角色"]:
 		_close_active_window()
 		call_deferred("_open_system_panel", window_type)
+
+
+func _open_system_window() -> void:
+	_close_active_window()
+	active_window = _window("系统菜单", "系统", Vector2(805, 178), Vector2(395, 390))
+	_add_label(
+		active_window,
+		"存档保存在当前 Windows 用户的游戏数据目录。",
+		Vector2(22, 53), Vector2(350, 24), 13, Color("#a9a58f")
+	)
+	var save_button := _button(active_window, "保存进度", Vector2(24, 90), Vector2(160, 46))
+	save_button.pressed.connect(_save_current_game.bind(true))
+	var load_button := _button(active_window, "读取进度", Vector2(207, 90), Vector2(160, 46))
+	load_button.disabled = not GameState.has_save()
+	load_button.pressed.connect(_load_saved_game)
+	var settings_button := _button(active_window, "声音与画面", Vector2(24, 154), Vector2(160, 46))
+	settings_button.pressed.connect(_open_settings_window)
+	var restart_button := _button(active_window, "重开本章", Vector2(207, 154), Vector2(160, 46))
+	restart_button.pressed.connect(_restart_game)
+	var return_button := _button(active_window, "返回江湖", Vector2(24, 218), Vector2(160, 46))
+	return_button.pressed.connect(_close_active_window)
+	var exit_button := _button(active_window, "退出游戏", Vector2(207, 218), Vector2(160, 46))
+	exit_button.pressed.connect(get_tree().quit)
+
+
+func _open_settings_window() -> void:
+	_close_active_window()
+	active_window = _window("声音与画面", "设置", Vector2(805, 190), Vector2(395, 330))
+	_add_label(
+		active_window,
+		"主音量　%d%%" % roundi(GameState.master_volume * 100.0),
+		Vector2(28, 72), Vector2(210, 30), 18, Color("#ded4b9")
+	)
+	var quieter := _button(active_window, "－", Vector2(245, 65), Vector2(52, 42))
+	quieter.pressed.connect(_adjust_volume.bind(-0.1))
+	var louder := _button(active_window, "＋", Vector2(309, 65), Vector2(52, 42))
+	louder.pressed.connect(_adjust_volume.bind(0.1))
+	_add_label(
+		active_window,
+		"显示模式　%s" % ("全屏" if GameState.fullscreen else "窗口"),
+		Vector2(28, 139), Vector2(210, 30), 18, Color("#ded4b9")
+	)
+	var display_button := _button(active_window, "切换模式", Vector2(245, 132), Vector2(116, 42))
+	display_button.pressed.connect(_toggle_fullscreen)
+	var back := _button(active_window, "返回系统", Vector2(126, 218), Vector2(142, 44))
+	back.pressed.connect(_open_system_window)
+
+
+func _adjust_volume(delta: float) -> void:
+	GameState.set_master_volume(GameState.master_volume + delta)
+	call_deferred("_open_settings_window")
+
+
+func _toggle_fullscreen() -> void:
+	GameState.toggle_fullscreen()
+	call_deferred("_open_settings_window")
+
+
+func _load_saved_game() -> void:
+	if not GameState.has_save():
+		GameState.set_message("尚未找到可以读取的存档。")
+		return
+	GameState.request_load()
+	get_tree().reload_current_scene()
 
 
 func _restart_game() -> void:
@@ -815,5 +979,6 @@ func _button(parent: Control, text: String, at: Vector2, button_size: Vector2) -
 	button.add_theme_stylebox_override("normal", _style(Color("#382f25"), 5, Color("#78613e")))
 	button.add_theme_stylebox_override("hover", _style(Color("#5a432b"), 5, Color("#d3ae62")))
 	button.add_theme_stylebox_override("pressed", _style(Color("#76502c"), 5, Color("#e9ca78")))
+	button.pressed.connect(AudioManager.play_ui)
 	parent.add_child(button)
 	return button

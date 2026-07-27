@@ -69,6 +69,11 @@ func take_damage(amount: int) -> void:
 		defeated.emit(self)
 
 
+func restore_health(value: int) -> void:
+	health = clampi(value, 1, max_health)
+	_refresh_nameplate()
+
+
 func play_attack() -> void:
 	if not is_instance_valid(weapon_pivot):
 		return

@@ -8,8 +8,8 @@
 - `godot/scripts/main.gd`：鼠标指令、自动追击战斗和网游式 HUD。
 - `godot/scripts/wuxia_actor_3d.gd`：玩家和敌人的 3D 实体、移动、碰撞与战斗表现。
 - `godot/scripts/cloud_ford_world_3d.gd`：云津渡实时 3D 场景、镜头跟随与鼠标射线换算。
-- `godot/scripts/game_state.gd`：气血、碎银、任务和武学状态。
-- `godot/assets/cloud_ford_2_5d.png`：原创 2.5D 云津渡场景。
+- `godot/scripts/game_state.gd`：属性、背包、装备、任务、存档与设置状态。
+- `godot/scripts/audio_manager.gd`：UI、战斗、拾取和任务反馈音效。
 - `installer/luodong-legendary.iss`：可自选安装目录的压缩安装包定义。
 - `WuxiaRaidController` 与 `WuxiaWorldMap`：旧 TypeScript 规则原型。
 - `assets/configs/story-content.json`：主线、副本、支线和随机奇遇的独立内容清单。
@@ -19,7 +19,7 @@
 
 ## 本地运行
 
-安装 Godot 4.7.1 后：
+安装 Godot 4.7.1 .NET 版本和 .NET 8 SDK 后：
 
 ```bash
 godot --path godot --editor
@@ -48,3 +48,6 @@ iscc /DMyAppVersion=0.4.2 installer/luodong-legendary.iss
 
 安装包允许玩家选择安装位置，并使用 LZMA2 固实压缩。网络功能仍不在
 单机 MVP 范围内，但客户端已采用适合继续扩展网游模块的引擎架构。
+
+存档和设置使用 Godot `user://` 数据目录，不会写入游戏安装目录。Windows
+上对应当前用户的应用数据目录，因此安装到只读目录时仍可正常保存。
