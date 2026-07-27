@@ -1336,12 +1336,29 @@ func _create_character_creation() -> void:
 		continue_button.pressed.connect(_continue_saved_character)
 		_add_label(
 			options_panel,
-			"检测到本机离线存档，可直接继续上次历程。",
+			"检测到本机离线存档",
 			Vector2(204, 469),
-			Vector2(338, 27),
+			Vector2(164, 27),
 			13,
 			Color("#91aa99")
 		)
+	else:
+		_add_label(
+			options_panel,
+			"当前 3D 版可玩，手绘版正在迁移",
+			Vector2(28, 469),
+			Vector2(340, 27),
+			13,
+			Color("#91aa99")
+		)
+	var isometric_button := _button(
+		options_panel,
+		"手绘 2.5D 原型",
+		Vector2(382, 462),
+		Vector2(160, 42)
+	)
+	isometric_button.name = "手绘2.5D原型"
+	isometric_button.pressed.connect(_open_isometric_prototype)
 	_select_creation_style("qingming")
 
 
@@ -1446,6 +1463,10 @@ func _confirm_character_creation() -> void:
 func _continue_saved_character() -> void:
 	GameState.request_load()
 	get_tree().reload_current_scene()
+
+
+func _open_isometric_prototype() -> void:
+	get_tree().change_scene_to_file("res://scenes/isometric_prototype.tscn")
 
 
 func _material_3d(color: Color, roughness: float) -> StandardMaterial3D:

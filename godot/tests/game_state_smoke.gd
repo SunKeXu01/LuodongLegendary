@@ -144,6 +144,49 @@ func _ready() -> void:
 	_expect(GameState.cloud_ford_reputation == 2, "护民路线首次交付应获得 2 点声望")
 	_expect(GameState.get_item_count("healing_salve") == 4, "护民路线应额外奖励两份金疮药")
 
+	var isometric_scene = load(
+		"res://scenes/isometric_prototype.tscn"
+	).instantiate() as IsometricCloudFord2D
+	add_child(isometric_scene)
+	var iso_ground := isometric_scene.get("ground_layer") as TileMapLayer
+	var iso_detail := isometric_scene.get("detail_layer") as TileMapLayer
+	_expect(
+		is_instance_valid(iso_ground)
+		and iso_ground.get_used_cells().size() == 48 * 48,
+		"手绘等轴测原型应生成完整 48×48 地表"
+	)
+	_expect(
+		is_instance_valid(iso_detail)
+		and iso_detail.get_used_cells().size() > 300,
+		"云津渡应生成贯穿南北与连接桥渡的青石商路"
+	)
+	_expect(
+		not isometric_scene.call("_is_walkable", Vector2i(40, 40))
+		and isometric_scene.call("_is_walkable", Vector2i(37, 22)),
+		"云津河应阻止陆地寻路，仅桥渡范围允许通行"
+	)
+	_expect(
+		not isometric_scene.call("_is_walkable", Vector2i(29, 34)),
+		"手绘客栈占地应写入寻路障碍"
+	)
+	_expect(
+		isometric_scene.call("_set_destination", Vector2i(23, 28))
+		and not (isometric_scene.get("navigation_path") as Array).is_empty(),
+		"手绘等轴测原型应支持纯鼠标网格寻路"
+	)
+	var iso_roofs := isometric_scene.get("roof_entries") as Array
+	_expect(
+		not iso_roofs.is_empty()
+		and is_instance_valid(
+			isometric_scene.get_node_or_null(
+				"屋顶前景层/临河客栈_手绘精修/临河客栈手绘建筑"
+			)
+		),
+		"临河客栈应使用高精度手绘透明建筑并参与遮挡淡出"
+	)
+	isometric_scene.queue_free()
+	await get_tree().process_frame
+
 	var main_scene = load("res://scenes/main.tscn").instantiate()
 	add_child(main_scene)
 	_expect(main_scene.get("character_creation_active"), "新档首次启动应显示人物创建流程")
@@ -160,6 +203,14 @@ func _ready() -> void:
 		),
 		"人物创建界面应包含全屏水墨幕和独立 3D 预览视口"
 	)
+	var creation_options := creation_layer.get_node_or_null("人物选项面板")
+	var has_isometric_entry := false
+	if is_instance_valid(creation_options):
+		for child in creation_options.get_children():
+			if child is Button and child.text == "手绘 2.5D 原型":
+				has_isometric_entry = true
+				break
+	_expect(has_isometric_entry, "启动界面应提供可直接体验的手绘 2.5D 原型入口")
 	main_scene.call("_select_creation_style", "jinyi")
 	var preview_actor := main_scene.get("creation_preview_actor") as WuxiaActor3D
 	_expect(

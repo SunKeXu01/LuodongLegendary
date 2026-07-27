@@ -48,6 +48,14 @@ Mind CC0 的青瓦、红墙、朱柱、木梁与石阶模块，并增加中文�
 接入 Poly Haven CC0 的 1K PBR 泥土地和苔草石路材质，使用漫反射、法线、
 环境遮蔽和粗糙度贴图，替换原先的大面积纯色地面。
 
+`main` 后续开发版已加入可从角色创建页直接进入的“手绘 2.5D 原型”。原型
+使用 Tiled `128×64` 等轴测规范和 Godot `TileMapLayer`，具备 48×48 云津渡
+地图、手绘泥地/石路/河水图集、AStar 纯鼠标寻路、建筑占地碰撞、足底
+Y 排序和屋顶淡出。临河客栈已替换为高清手绘透明建筑；早期低模方块稿
+仅用于验证坐标、占地和遮挡，因品质不达标已经退出运行场景。
+
+![云津渡高清手绘客栈实机画面](docs/screenshots/cloud-ford-painted-inn-preview.jpeg)
+
 ![云津渡 2.5D 实机画面](docs/screenshots/cloud-ford-kaykit-preview.jpeg)
 
 ![云津渡东亚建筑移植实机画面](docs/screenshots/cloud-ford-polygonal-preview.jpeg)
@@ -105,5 +113,7 @@ Windows 安装包通过 `installer/luodong-legendary.iss` 使用 Inno Setup 6 �
 - [技术架构](docs/ARCHITECTURE.md)
 - [开发说明](docs/DEVELOPMENT.md)
 - [手绘等轴测 2.5D 美术规范](docs/ISOMETRIC_2D_ART_SPEC.md)
+- [云津渡场景母图重建清单](docs/CLOUD_FORD_MASTER_RECONSTRUCTION.md)
+- [Blender 3D 定形与 2.5D 输出流程](docs/BLENDER_2_5D_PIPELINE.md)
 - [等距 3D 技术移植记录](docs/ISOMETRIC_3D_PORT.md)
 - [东亚建筑资产移植记录](docs/EAST_ASIAN_ASSET_PORT.md)
