@@ -164,6 +164,26 @@ func _ready() -> void:
 		is_instance_valid(cloud_world.world_root.get_node_or_null("云津巡夜灯阁")),
 		"云津渡街市应载入真实 CC0 东亚灯阁模型"
 	)
+	var imported_smithy: Node = cloud_world.world_root.get_node_or_null("鲁氏铁铺")
+	_expect(
+		is_instance_valid(imported_smithy)
+		and is_instance_valid(imported_smithy.get_node_or_null("鲁氏铁铺青瓦屋顶"))
+		and is_instance_valid(imported_smithy.get_node_or_null("鲁氏铁铺匾额")),
+		"鲁氏铁铺应由真实 CC0 东亚模块构成并显示中文匾额"
+	)
+	_expect(
+		is_instance_valid(imported_smithy)
+		and is_instance_valid(imported_smithy.get_node_or_null("铁铺锻炉"))
+		and is_instance_valid(imported_smithy.get_node_or_null("锻炉炭火")),
+		"鲁氏铁铺应包含发光锻炉而不是欧洲铁匠铺剪影"
+	)
+	var imported_warehouse: Node = cloud_world.world_root.get_node_or_null("云津货栈")
+	_expect(
+		is_instance_valid(imported_warehouse)
+		and is_instance_valid(imported_warehouse.get_node_or_null("云津货栈青瓦屋顶"))
+		and is_instance_valid(imported_warehouse.get_node_or_null("云津货栈匾额")),
+		"云津货栈应由真实 CC0 东亚模块构成并显示中文匾额"
+	)
 	_expect(
 		is_instance_valid(imported_inn)
 		and is_instance_valid(imported_inn.get_node_or_null("临河客栈匾额")),
@@ -244,6 +264,16 @@ func _ready() -> void:
 		)
 		main_scene.set("queued_skill", "")
 		main_scene.call("_clear_target")
+	cloud_world.play_skill_effect(
+		"青冥剑式",
+		world_player.global_position,
+		world_player.global_position + Vector3(1.2, 0, 0.8)
+	)
+	await get_tree().process_frame
+	_expect(
+		is_instance_valid(cloud_world.combat_vfx.get_node_or_null("武学刀光轨迹/MIT三维拖尾")),
+		"近战武学应使用移植的 MIT 三维拖尾生成弧形刀光"
+	)
 	GameState.damage_player(35)
 	GameState.spend_inner_power(30)
 	main_scene.call("_command_use_rest_station")
@@ -291,7 +321,9 @@ func _ready() -> void:
 	dungeon_player.global_position = Vector3(-2.0, 0.0, 1.3)
 	main_scene.call("_update_dungeon_hazards")
 	_expect(GameState.player_health == health_before_trap - 10, "踩中禅院踏板应损失 10 点气血")
-	dungeon_player.global_position = temple_world.mechanism_marker.global_position + Vector3(0.9, 0, 0.4)
+	dungeon_player.global_position = (
+		temple_world.mechanism_marker.global_position + Vector3(0.9, 0, 0.4)
+	)
 	main_scene.set("pending_mechanism", temple_world.mechanism_marker)
 	main_scene.call("_update_pending_interactions")
 	_expect(GameState.dungeon_state == "rescue", "未触发警戒时操作总闸应直接进入营救阶段")

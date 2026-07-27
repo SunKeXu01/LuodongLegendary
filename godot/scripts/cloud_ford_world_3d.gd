@@ -313,13 +313,21 @@ func _create_landscape() -> void:
 func _create_settlement() -> void:
 	_create_ming_guildhall(Vector3(-8.5, 0.0, -5.45))
 	_create_ming_residence(Vector3(-3.1, 0.0, -6.0))
-	_vendor_building(
-		"鲁氏铁铺", "building_blacksmith_red", Vector3(3.2, 0.0, -5.8),
-		3.55, 8.0, Vector2(5.1, 4.2)
+	_create_ming_trade_building(
+		"鲁氏铁铺",
+		"鲁氏铁铺",
+		Vector3(3.2, 0.0, -5.8),
+		0.46,
+		Color("#d68a58"),
+		true
 	)
-	_vendor_building(
-		"云津货栈", "building_market_red", Vector3(-9.5, 0.0, 4.9),
-		3.5, 165.0, Vector2(4.7, 4.0)
+	_create_ming_trade_building(
+		"云津货栈",
+		"云津货栈",
+		Vector3(-9.5, 0.0, 4.9),
+		0.5,
+		Color("#d2b276"),
+		false
 	)
 
 	_vendor_asset(
@@ -360,6 +368,156 @@ func _create_settlement() -> void:
 		_create_lantern("灯笼%d" % index, lantern_positions[index])
 	_create_rest_station(Vector3(0.7, 0.0, 4.2))
 	_create_riverside_pavilion(Vector3(0.7, 0.0, 4.2))
+
+
+func _create_ming_trade_building(
+	node_name: String,
+	sign_text: String,
+	at: Vector3,
+	module_scale: float,
+	sign_color: Color,
+	has_forge: bool
+) -> void:
+	var root := Node3D.new()
+	root.name = node_name
+	root.position = at
+	root.rotation_degrees.y = 8.0 if has_forge else -15.0
+	world_root.add_child(root)
+
+	var half_width := 1.8 if has_forge else 2.05
+	var half_depth := 1.62 if has_forge else 1.82
+	var parts := [
+		[
+			"%s前墙" % node_name, "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, half_depth), module_scale, 0.0
+		],
+		[
+			"%s后墙" % node_name, "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, -half_depth), module_scale, 180.0
+		],
+		[
+			"%s左墙" % node_name, "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(-half_width, 0, 0), module_scale, 90.0
+		],
+		[
+			"%s右墙" % node_name, "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(half_width, 0, 0), module_scale, -90.0
+		],
+		[
+			"%s青瓦屋顶" % node_name,
+			(
+				"%sTempleRoof01Corner_Art.glb" % POLYGONAL_TEMPLE
+				if has_forge
+				else "%sTempleRoof01_Art.glb" % POLYGONAL_TEMPLE
+			),
+			Vector3(0, 3.7 if has_forge else 3.86, 0),
+			module_scale,
+			0.0
+		],
+		[
+			"%s前檐木梁" % node_name, "%sTempleBeam01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 3.04, half_depth + 0.1), module_scale, 0.0
+		],
+		[
+			"%s石阶" % node_name, "%sEntranceStairs.glb" % POLYGONAL_LUNAR,
+			Vector3(0, 0.02, half_depth + 1.02), module_scale + 0.04, 0.0
+		],
+	]
+	for x_offset in [-half_width + 0.22, half_width - 0.22]:
+		for z_offset in [-half_depth + 0.18, half_depth - 0.18]:
+			parts.append([
+				"%s朱柱" % node_name,
+				"%sTempleColumn_Art.glb" % POLYGONAL_TEMPLE,
+				Vector3(x_offset, 0, z_offset),
+				module_scale,
+				0.0,
+			])
+	for part in parts:
+		_vendor_asset(
+			str(part[0]),
+			str(part[1]),
+			part[2] as Vector3,
+			float(part[3]),
+			float(part[4]),
+			root
+		)
+
+	var sign_back := MeshInstance3D.new()
+	sign_back.name = "%s木匾" % node_name
+	sign_back.position = Vector3(0, 2.55, half_depth + 0.14)
+	var sign_mesh := BoxMesh.new()
+	sign_mesh.size = Vector3(1.45 if has_forge else 1.7, 0.5, 0.1)
+	sign_mesh.material = _material(Color("#38241c"), 0.0, 0.82)
+	sign_back.mesh = sign_mesh
+	root.add_child(sign_back)
+
+	var sign := Label3D.new()
+	sign.name = "%s匾额" % node_name
+	sign.position = Vector3(0, 2.55, half_depth + 0.21)
+	sign.text = sign_text
+	sign.font_size = 46
+	sign.outline_size = 6
+	sign.pixel_size = 0.0067
+	sign.modulate = sign_color
+	root.add_child(sign)
+
+	if has_forge:
+		_create_forge_props(root, Vector3(0.95, 0, half_depth + 0.86))
+	else:
+		for index in range(3):
+			_vendor_asset(
+				"货栈灯笼%d" % index,
+				"%sLamp01.glb" % POLYGONAL_LUNAR,
+				Vector3(-1.05 + index * 1.05, 0.08, half_depth + 0.54),
+				0.62,
+				0.0,
+				root
+			)
+
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(root, meshes)
+	occluder_groups.append({
+		"center": at,
+		"size": Vector2(5.0 if has_forge else 5.4, 4.8 if has_forge else 5.2),
+		"meshes": meshes,
+	})
+
+
+func _create_forge_props(parent: Node3D, at: Vector3) -> void:
+	var brazier := MeshInstance3D.new()
+	brazier.name = "铁铺锻炉"
+	brazier.position = at + Vector3(0, 0.36, 0)
+	var brazier_mesh := CylinderMesh.new()
+	brazier_mesh.top_radius = 0.48
+	brazier_mesh.bottom_radius = 0.58
+	brazier_mesh.height = 0.7
+	brazier_mesh.material = _material(Color("#34302c"), 0.24, 0.68)
+	brazier.mesh = brazier_mesh
+	parent.add_child(brazier)
+
+	var coals := MeshInstance3D.new()
+	coals.name = "锻炉炭火"
+	coals.position = at + Vector3(0, 0.73, 0)
+	var coal_mesh := CylinderMesh.new()
+	coal_mesh.top_radius = 0.39
+	coal_mesh.bottom_radius = 0.39
+	coal_mesh.height = 0.05
+	var coal_material := _material(Color("#e24d28"), 0.0, 0.78)
+	coal_material.emission_enabled = true
+	coal_material.emission = Color("#ff652f")
+	coal_material.emission_energy_multiplier = 2.8
+	coal_mesh.material = coal_material
+	coals.mesh = coal_mesh
+	parent.add_child(coals)
+
+	var forge_light := OmniLight3D.new()
+	forge_light.name = "锻炉火光"
+	forge_light.position = at + Vector3(0, 0.92, 0)
+	forge_light.light_color = Color("#ff7840")
+	forge_light.omni_range = 3.5
+	forge_light.light_energy = 1.1
+	forge_light.shadow_enabled = false
+	parent.add_child(forge_light)
 
 
 func _create_ming_residence(at: Vector3) -> void:

@@ -64,14 +64,32 @@ the separately licensed CC0 visual assets used by the map are listed below.
 No artwork, icons, fonts, audio, maps, story, characters or other game content
 from `broken_seals` is included.
 
+## JohanAR / Oussama BOUKHELF Trail3D
+
+- Gist: <https://gist.github.com/JohanAR/d4ad3ee23a14296b73ccfc97b6cfc0dd>
+- Original author credited by the source: Oussama BOUKHELF
+- Godot 4 update: JohanAR
+- License: MIT
+- Pinned raw revision:
+  `dd9c8b3a397c2ea8f43056a3b8a6447dc577fa3a`
+- Actual use: `godot/scripts/trail_3d.gd` adapts the upstream camera-facing
+  triangle-strip trail technique for short-lived martial-arts weapon arcs.
+- Changes: replaced the original three-point smoothing state with a bounded,
+  age-based sample buffer; added vertex alpha/width profiles; exposed an
+  explicit stop-emitting lifecycle; and integrated the trail with the original
+  skill colors, impact effects and cleanup timing in `combat_vfx_3d.gd`.
+
+No upstream artwork, textures, maps, gameplay data or story content is included.
+
 ## KayKit Medieval Hexagon Pack 1.0
 
 - Author: Kay Lousberg / KayKit
 - Source: <https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0>
 - Pinned commit: `84fa4e91af6a88989be7c99e0891cede11f2ca38`
 - License: Creative Commons Zero 1.0
-- Used assets: selected red-roof buildings, neutral structures, nature models
-  and props for the Cloud Ford map.
+- Used assets: selected neutral structures, nature models and props for the
+  Cloud Ford map. The former European blacksmith and market building silhouettes
+  are no longer instantiated by the active map.
 
 ## KayKit Character Pack: Adventures 1.0
 
@@ -94,9 +112,9 @@ License text: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
 - Used assets: selected temple wall, column, beam, roof-corner, staircase,
   gateway and lantern GLB models.
 - Actual use: the models are composed in Godot into the Cloud Ford inn,
-  traditional gateway and street details. The map layout, building composition,
-  names, collision/navigation, occlusion and gameplay integration are original
-  to this project.
+  residence, blacksmith, warehouse, traditional gateway and street details.
+  The map layout, building composition, names, collision/navigation, occlusion
+  and gameplay integration are original to this project.
 
 No upstream map, neon advertisements, gameplay, code, characters, names or
 story content is included. The exact imported files and license link are

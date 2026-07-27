@@ -11,7 +11,7 @@ CC0 GLB 仓库移植了真实东亚建筑模块。临河客栈现由青瓦屋顶
 
 ## Windows 游玩
 
-从 GitHub Releases 下载 `LuodongLegendary-0.7.0-win-x64-setup.exe`。安装向导采用 LZMA2 压缩，玩家可以修改安装目录，也可以选择是否创建桌面快捷方式。游戏仍然不需要联网。
+从 GitHub Releases 下载 `LuodongLegendary-0.8.0-win-x64-setup.exe`。安装向导采用 LZMA2 压缩，玩家可以修改安装目录，也可以选择是否创建桌面快捷方式。游戏仍然不需要联网。
 
 游戏采用纯鼠标操作：点击地面移动，点击敌人后自动接近并攻击，点击 NPC
 交谈，点击掉落物自动前往拾取，底部武学和右下角功能入口均可直接点击。
@@ -25,9 +25,16 @@ CC0 GLB 仓库移植了真实东亚建筑模块。临河客栈现由青瓦屋顶
 的寒铁与碎银，并永久增加 2 点外功攻击；强化等级、材料和属性都会写入
 离线存档。背包与角色面板会同步显示装备的 `+N` 等级。
 
+`v0.8.0` 继续清理通用欧洲轮廓：鲁氏铁铺与云津货栈已经改用 Polygonal
+Mind CC0 的青瓦、红墙、朱柱、木梁与石阶模块，并增加中文匾额、灯笼和
+发光锻炉。青冥剑式、伏虎掌和敌人反击采用从 MIT Trail3D 技术重构的
+相机朝向弧形刀光；机弩术保留直线曳光，使近战与远程反馈更易区分。
+
 ![云津渡 2.5D 实机画面](docs/screenshots/cloud-ford-kaykit-preview.jpeg)
 
 ![云津渡东亚建筑移植实机画面](docs/screenshots/cloud-ford-polygonal-preview.jpeg)
+
+![云津渡铁铺货栈与网游 HUD 实机画面](docs/screenshots/cloud-ford-v0.8.0-preview.jpeg)
 
 完成云津渡序章后可进入独立的“寂音禅院”副本地图。副本包含巡逻守卫、
 可造成伤害的踏板暗弩、可点击的机关总闸、商客营救、院主首领战，以及
