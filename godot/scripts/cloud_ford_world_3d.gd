@@ -352,6 +352,7 @@ func _create_settlement() -> void:
 	for index in lantern_positions.size():
 		_create_lantern("灯笼%d" % index, lantern_positions[index])
 	_create_rest_station(Vector3(0.7, 0.0, 4.2))
+	_create_riverside_pavilion(Vector3(0.7, 0.0, 4.2))
 
 
 func _create_rest_station(at: Vector3) -> void:
@@ -408,6 +409,126 @@ func _create_rest_station(at: Vector3) -> void:
 	rest_marker_label.fixed_size = false
 	rest_marker_label.modulate = Color("#d8e6bc")
 	rest_marker.add_child(rest_marker_label)
+
+
+func _create_riverside_pavilion(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "临水茶亭"
+	root.position = at
+	world_root.add_child(root)
+	var platform := _box(
+		"茶亭台基",
+		at + Vector3(0, 0.12, 0),
+		Vector3(3.15, 0.24, 2.75),
+		Color("#727064")
+	)
+	var timber := Color("#5d2924")
+	for x_offset in [-1.12, 1.12]:
+		for z_offset in [-0.92, 0.92]:
+			_cylinder(
+				"茶亭柱",
+				at + Vector3(x_offset, 1.22, z_offset),
+				0.11,
+				2.2,
+				timber
+			)
+	var beams := [
+		[Vector3(0, 2.18, -0.92), Vector3(2.55, 0.16, 0.16)],
+		[Vector3(0, 2.18, 0.92), Vector3(2.55, 0.16, 0.16)],
+		[Vector3(-1.12, 2.18, 0), Vector3(0.16, 0.16, 2.1)],
+		[Vector3(1.12, 2.18, 0), Vector3(0.16, 0.16, 2.1)],
+	]
+	for index in beams.size():
+		_box(
+			"茶亭梁%d" % index,
+			at + beams[index][0],
+			beams[index][1],
+			timber
+		)
+	var roof := MeshInstance3D.new()
+	roof.name = "明式歇山顶"
+	roof.position = at + Vector3(0, 2.2, 0)
+	roof.mesh = _hip_roof_mesh(3.65, 3.15, 0.82, 1.22, Color("#263a35"))
+	world_root.add_child(roof)
+	var eave_color := Color("#b79b61")
+	var eave_parts := [
+		[Vector3(0, 2.21, -1.58), Vector3(3.72, 0.09, 0.10)],
+		[Vector3(0, 2.21, 1.58), Vector3(3.72, 0.09, 0.10)],
+		[Vector3(-1.83, 2.21, 0), Vector3(0.10, 0.09, 3.16)],
+		[Vector3(1.83, 2.21, 0), Vector3(0.10, 0.09, 3.16)],
+	]
+	for index in eave_parts.size():
+		_box(
+			"茶亭檐饰%d" % index,
+			at + eave_parts[index][0],
+			eave_parts[index][1],
+			eave_color
+		)
+	var ridge := _cylinder_mesh_instance(
+		"屋脊",
+		at + Vector3(0, 3.04, 0),
+		0.07,
+		1.42,
+		Color("#b69a62")
+	)
+	ridge.rotation_degrees.z = 90.0
+	var plaque := _box(
+		"云津茶亭匾",
+		at + Vector3(0, 1.93, 1.02),
+		Vector3(1.05, 0.36, 0.08),
+		Color("#34231d")
+	)
+	var plaque_label := Label3D.new()
+	plaque_label.name = "云津茶亭匾文"
+	plaque_label.position = at + Vector3(0, 1.93, 1.075)
+	plaque_label.text = "云津茶亭"
+	plaque_label.font_size = 34
+	plaque_label.outline_size = 5
+	plaque_label.pixel_size = 0.0065
+	plaque_label.modulate = Color("#d8bd72")
+	world_root.add_child(plaque_label)
+	occluder_groups.append({
+		"center": at,
+		"size": Vector2(3.7, 3.2),
+		"meshes": [platform, roof, ridge, plaque],
+	})
+
+
+func _hip_roof_mesh(
+	width: float,
+	depth: float,
+	height: float,
+	ridge_length: float,
+	color: Color
+) -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var front_left := Vector3(-width * 0.5, 0, depth * 0.5)
+	var front_right := Vector3(width * 0.5, 0, depth * 0.5)
+	var back_left := Vector3(-width * 0.5, 0, -depth * 0.5)
+	var back_right := Vector3(width * 0.5, 0, -depth * 0.5)
+	var ridge_left := Vector3(-ridge_length * 0.5, height, 0)
+	var ridge_right := Vector3(ridge_length * 0.5, height, 0)
+	var triangles := [
+		[front_left, front_right, ridge_right],
+		[front_left, ridge_right, ridge_left],
+		[back_right, back_left, ridge_left],
+		[back_right, ridge_left, ridge_right],
+		[back_left, front_left, ridge_left],
+		[front_right, back_right, ridge_right],
+	]
+	for triangle in triangles:
+		for vertex in triangle:
+			surface.set_uv(Vector2(vertex.x / width + 0.5, vertex.z / depth + 0.5))
+			surface.add_vertex(vertex)
+	surface.generate_normals()
+	var roof_material := _material(color, 0.0, 0.82)
+	# The procedural roof is intentionally double-sided: the isometric camera
+	# can cross the ridge during mouse travel, and a one-sided SurfaceTool mesh
+	# otherwise appears as a bare timber frame from half of the map.
+	roof_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	surface.set_material(roof_material)
+	return surface.commit()
 
 
 func _create_nature() -> void:
@@ -639,6 +760,26 @@ func _cylinder(
 	mesh.material = _material(color, 0.0, 0.9)
 	mesh_instance.mesh = mesh
 	world_root.add_child(mesh_instance)
+
+
+func _cylinder_mesh_instance(
+	node_name: String,
+	at: Vector3,
+	radius: float,
+	height: float,
+	color: Color
+) -> MeshInstance3D:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	mesh_instance.position = at
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mesh.material = _material(color, 0.0, 0.72)
+	mesh_instance.mesh = mesh
+	world_root.add_child(mesh_instance)
+	return mesh_instance
 
 
 func _sphere(node_name: String, at: Vector3, radius: float, color: Color) -> void:

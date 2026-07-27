@@ -41,6 +41,12 @@ var target_health_bar: ProgressBar
 var hover_hint_panel: Panel
 var hover_hint_label: Label
 var skill_buttons: Array[Button] = []
+var skill_cooldown_overlays: Dictionary = {}
+var skill_cooldown_labels: Dictionary = {}
+var skill_cost_labels: Dictionary = {}
+var combat_cast_panel: Panel
+var combat_cast_bar: ProgressBar
+var combat_cast_label: Label
 var qinggong_time := 0.0
 var queued_skill := ""
 var skill_cooldowns := {
@@ -433,6 +439,7 @@ func _physics_process(delta: float) -> void:
 	_update_dungeon_hazards()
 	_update_boss_mechanics(delta)
 	_refresh_skill_buttons()
+	_refresh_combat_cast_bar()
 	if is_instance_valid(environment_label):
 		environment_label.text = "%s · %s" % [
 			world.get_time_label(), world.get_weather_label()
@@ -925,22 +932,49 @@ func _create_hud() -> void:
 	status.add_child(experience_bar)
 	_add_label(status, "境界进度", Vector2(12, 94), Vector2(74, 17), 11, Color("#a9a388"), true)
 
-	var target_panel := _panel(Vector2(468, 66), Vector2(344, 65), Color(0.025, 0.035, 0.03, 0.88))
+	var target_panel := _panel(Vector2(468, 66), Vector2(344, 65), Color(0.025, 0.035, 0.03, 0.91))
 	hud.add_child(target_panel)
+	var target_seal := _panel(Vector2(9, 8), Vector2(44, 44), Color("#5b2525"))
+	target_panel.add_child(target_seal)
+	_add_label(
+		target_seal, "敌", Vector2(2, 1), Vector2(40, 40),
+		23, Color("#f1d2a0"), true
+	)
 	target_label = _add_label(
-		target_panel, "目标｜尚未选中", Vector2(14, 8), Vector2(316, 22), 15, Color("#ead9b1"), true
+		target_panel, "目标｜尚未选中", Vector2(62, 7), Vector2(268, 22),
+		15, Color("#ead9b1"), true
 	)
 	target_health_bar = ProgressBar.new()
-	target_health_bar.position = Vector2(21, 36)
-	target_health_bar.size = Vector2(302, 13)
+	target_health_bar.position = Vector2(62, 36)
+	target_health_bar.size = Vector2(264, 13)
 	target_health_bar.show_percentage = false
 	target_health_bar.max_value = 100
 	target_health_bar.add_theme_stylebox_override("background", _style(Color("#211b18"), 3))
 	target_health_bar.add_theme_stylebox_override("fill", _style(Color("#9f3634"), 3))
 	target_panel.add_child(target_health_bar)
 
+	combat_cast_panel = _panel(
+		Vector2(476, 139), Vector2(328, 38), Color(0.03, 0.035, 0.03, 0.92)
+	)
+	combat_cast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	combat_cast_panel.visible = false
+	hud.add_child(combat_cast_panel)
+	combat_cast_bar = ProgressBar.new()
+	combat_cast_bar.position = Vector2(8, 18)
+	combat_cast_bar.size = Vector2(312, 11)
+	combat_cast_bar.show_percentage = false
+	combat_cast_bar.min_value = 0
+	combat_cast_bar.max_value = 1
+	combat_cast_bar.add_theme_stylebox_override("background", _style(Color("#211b18"), 2))
+	combat_cast_bar.add_theme_stylebox_override("fill", _style(Color("#b64b37"), 2))
+	combat_cast_panel.add_child(combat_cast_bar)
+	combat_cast_label = _add_label(
+		combat_cast_panel, "", Vector2(8, 1), Vector2(312, 17),
+		12, Color("#f1d09a"), true
+	)
+
 	hover_hint_panel = _panel(
-		Vector2(476, 140), Vector2(328, 34), Color(0.025, 0.035, 0.03, 0.88)
+		Vector2(476, 184), Vector2(328, 34), Color(0.025, 0.035, 0.03, 0.88)
 	)
 	hover_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hover_hint_panel.visible = false
@@ -988,23 +1022,51 @@ func _create_hud() -> void:
 	)
 	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
-	var skill_bar := _panel(Vector2(404, 612), Vector2(548, 96), Color(0.02, 0.03, 0.027, 0.94))
+	var skill_bar := _panel(Vector2(390, 604), Vector2(576, 104), Color(0.02, 0.03, 0.027, 0.95))
 	hud.add_child(skill_bar)
 	var skill_names := ["青冥剑式", "伏虎掌", "机弩术", "踏燕行", "调息"]
 	var skill_marks := ["剑", "掌", "弩", "轻", "息"]
 	for index in skill_names.size():
 		var button := _button(
-			skill_bar, "%s\n%s" % [skill_marks[index], skill_names[index]],
-			Vector2(13 + index * 106, 10), Vector2(96, 68)
+			skill_bar, skill_marks[index],
+			Vector2(15 + index * 112, 8), Vector2(98, 78)
 		)
 		button.set_meta("skill_name", skill_names[index])
 		button.set_meta("skill_mark", skill_marks[index])
 		button.tooltip_text = _skill_tooltip(skill_names[index])
-		button.add_theme_font_size_override("font_size", 13)
+		button.add_theme_font_size_override("font_size", 25)
 		button.pressed.connect(_activate_skill.bind(skill_names[index]))
+		var cooldown_overlay := ColorRect.new()
+		cooldown_overlay.name = "冷却遮罩"
+		cooldown_overlay.color = Color(0.02, 0.025, 0.022, 0.72)
+		cooldown_overlay.position = Vector2.ZERO
+		cooldown_overlay.size = button.size
+		cooldown_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cooldown_overlay.visible = false
+		button.add_child(cooldown_overlay)
+		var skill_name_label := _add_label(
+			button, skill_names[index], Vector2(4, 54), Vector2(90, 20),
+			11, Color("#e6d8b4"), true
+		)
+		skill_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var cost_label := _add_label(
+			button, "", Vector2(50, 4), Vector2(42, 17),
+			10, Color("#8fc6b6"), true
+		)
+		cost_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var cooldown_label := _add_label(
+			button, "", Vector2(5, 25), Vector2(88, 25),
+			16, Color("#fff0cf"), true
+		)
+		cooldown_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cooldown_label.visible = false
+		skill_cooldown_overlays[skill_names[index]] = cooldown_overlay
+		skill_cooldown_labels[skill_names[index]] = cooldown_label
+		skill_cost_labels[skill_names[index]] = cost_label
 		skill_buttons.append(button)
 	_add_label(
-		skill_bar, "左键移动 / 选敌 · 点击武学施放", Vector2(131, 77), Vector2(288, 16),
+		skill_bar, "纯鼠标操作 · 左键寻路 / 选敌 / 施展武学",
+		Vector2(126, 86), Vector2(324, 16),
 		11, Color("#979b8a"), true
 	)
 
@@ -1276,15 +1338,58 @@ func _activate_skill(skill_name: String) -> void:
 func _refresh_skill_buttons() -> void:
 	for button in skill_buttons:
 		var skill_name := str(button.get_meta("skill_name"))
-		var mark := str(button.get_meta("skill_mark"))
 		var skill: Dictionary = SKILL_DATA[skill_name]
 		var cooldown_left := float(skill_cooldowns.get(skill_name, 0.0))
-		var status := "自动攻击" if skill_name == "青冥剑式" else "%d 内力" % int(skill["cost"])
-		if cooldown_left > 0.05:
-			status = "%.1f 息" % cooldown_left
-		elif queued_skill == skill_name:
-			status = "等待施放"
-		button.text = "%s %s\n%s" % [mark, skill_name, status]
+		var cooldown_total := float(skill["cooldown"])
+		var overlay := skill_cooldown_overlays.get(skill_name) as ColorRect
+		var cooldown_label := skill_cooldown_labels.get(skill_name) as Label
+		var cost_label := skill_cost_labels.get(skill_name) as Label
+		if is_instance_valid(cost_label):
+			cost_label.text = (
+				"自动"
+				if skill_name == "青冥剑式"
+				else "%d 内" % int(skill["cost"])
+			)
+		if is_instance_valid(overlay):
+			var ratio := clampf(cooldown_left / maxf(0.01, cooldown_total), 0.0, 1.0)
+			overlay.visible = cooldown_left > 0.05
+			overlay.position.y = button.size.y * (1.0 - ratio)
+			overlay.size = Vector2(button.size.x, button.size.y * ratio)
+		if is_instance_valid(cooldown_label):
+			cooldown_label.visible = cooldown_left > 0.05 or queued_skill == skill_name
+			cooldown_label.text = (
+				"候招"
+				if queued_skill == skill_name
+				else ("%.1f" % cooldown_left if cooldown_left > 0.05 else "")
+			)
+		button.modulate = (
+			Color("#fff5dc")
+			if queued_skill == skill_name
+			else (Color("#d6d6ce") if cooldown_left <= 0.05 else Color("#8a8e88"))
+		)
+
+
+func _refresh_combat_cast_bar() -> void:
+	if not is_instance_valid(combat_cast_panel):
+		return
+	if is_instance_valid(boss_telegraph):
+		combat_cast_panel.visible = true
+		combat_cast_label.text = "危险｜寂音院主正在蓄力 · 震钟劲"
+		combat_cast_bar.value = clampf(
+			1.0 - boss_telegraph_time / maxf(0.01, boss_telegraph_total),
+			0.0,
+			1.0
+		)
+		return
+	if not queued_skill.is_empty() and is_instance_valid(selected_enemy):
+		var skill: Dictionary = SKILL_DATA[queued_skill]
+		var distance := player.global_position.distance_to(selected_enemy.global_position)
+		var required_range := float(skill["range"])
+		combat_cast_panel.visible = true
+		combat_cast_label.text = "候招｜%s · 自动接近有效射程" % queued_skill
+		combat_cast_bar.value = clampf(required_range / maxf(required_range, distance), 0.0, 1.0)
+		return
+	combat_cast_panel.visible = false
 
 
 func _skill_tooltip(skill_name: String) -> String:

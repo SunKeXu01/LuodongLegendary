@@ -44,6 +44,26 @@ No artwork, particles, audio, characters, maps or story content from
 `isometric-3d-toolkit` is included. Ming-era names, maps and story remain original;
 the separately licensed CC0 visual assets used by the map are listed below.
 
+## Relintai/broken_seals
+
+- Source: <https://github.com/Relintai/broken_seals>
+- License: MIT
+- Source commit: `3b86f3bee5a225d1b9bd5810ea2684791e914347`
+- Files studied: `game/ui/player/actionbars/ActionBarEntry.gd`,
+  `game/ui/player/actionbars/ActionBarEntry.tscn`,
+  `game/ui/player/unitframes/UnitframeBase.gd` and
+  `game/ui/player/castbar/Castbar.gd`
+- Actual use: the active Godot HUD adapts the generic MMO separation between
+  unit frame, action slot, cooldown wipe and cast bar. The implementation in
+  `godot/scripts/main.gd` is original GDScript and is integrated with this
+  project's mouse-only martial-arts queue, inner-power costs, target selection
+  and boss telegraph state.
+- Changes: rebuilt the layout, drawing code, state model, labels and interactions
+  for a single-player Ming-era wuxia ARPG.
+
+No artwork, icons, fonts, audio, maps, story, characters or other game content
+from `broken_seals` is included.
+
 ## KayKit Medieval Hexagon Pack 1.0
 
 - Author: Kay Lousberg / KayKit

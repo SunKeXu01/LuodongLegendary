@@ -147,6 +147,27 @@ func _ready() -> void:
 		is_instance_valid(cloud_world.world_root.get_node_or_null("临河客栈")),
 		"云津渡应载入 KayKit 完整客栈模型而不是程序化方块占位"
 	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("临水茶亭")),
+		"云津渡应生成临水茶亭地标"
+	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("明式歇山顶")),
+		"临水茶亭应包含可辨识的明式歇山屋顶"
+	)
+	_expect(main_scene.get("skill_cooldown_overlays").size() == 5, "五个武学槽位都应具备冷却遮罩")
+	main_scene.get("skill_cooldowns")["踏燕行"] = 3.0
+	main_scene.call("_refresh_skill_buttons")
+	_expect(
+		main_scene.get("skill_cooldown_overlays")["踏燕行"].visible,
+		"冷却中的踏燕行应显示纵向冷却遮罩"
+	)
+	_expect(
+		main_scene.get("skill_cooldown_labels")["踏燕行"].visible,
+		"冷却中的踏燕行应显示剩余秒数"
+	)
+	main_scene.get("skill_cooldowns")["踏燕行"] = 0.0
+	main_scene.call("_refresh_skill_buttons")
 	var world_player = main_scene.get("player")
 	_expect(world_player.uses_imported_model, "玩家应使用带骨骼动画的外部 GLB 模型")
 	_expect(
@@ -191,6 +212,16 @@ func _ready() -> void:
 		first_world_enemy.hovered = true
 		_expect(first_world_enemy.selection_disc.visible, "鼠标悬停敌人时应显示 3D 交互环")
 		first_world_enemy.hovered = false
+		main_scene.call("_select_enemy", first_world_enemy)
+		main_scene.set("queued_skill", "伏虎掌")
+		main_scene.call("_refresh_combat_cast_bar")
+		_expect(main_scene.get("combat_cast_panel").visible, "排队武学时应显示候招条")
+		_expect(
+			"候招" in main_scene.get("combat_cast_label").text,
+			"候招条应说明正在自动接近有效射程"
+		)
+		main_scene.set("queued_skill", "")
+		main_scene.call("_clear_target")
 	GameState.damage_player(35)
 	GameState.spend_inner_power(30)
 	main_scene.call("_command_use_rest_station")
@@ -275,6 +306,12 @@ func _ready() -> void:
 		_expect(
 			is_instance_valid(main_scene.get("boss_telegraph")),
 			"院主应生成可见的范围招式预警"
+		)
+		main_scene.call("_refresh_combat_cast_bar")
+		_expect(main_scene.get("combat_cast_panel").visible, "首领蓄力时应显示危险施法条")
+		_expect(
+			"震钟劲" in main_scene.get("combat_cast_label").text,
+			"首领施法条应显示正在蓄力的招式"
 		)
 		dungeon_player.attack_cooldown = 0.0
 		dungeon_player.global_position = boss_wave[0].global_position + Vector3(0, 0, 1.0)
