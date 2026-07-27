@@ -17,6 +17,7 @@ var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
 var health_label: Label
+var level_label: Label
 var inner_power_bar: ProgressBar
 var experience_bar: ProgressBar
 var silver_label: Label
@@ -76,11 +77,30 @@ func _create_player() -> void:
 
 
 func _create_enemies() -> void:
-	var specs := [
+	if GameState.quest_state in ["followup_available", "second_ready", "completed"]:
+		return
+	if GameState.quest_state == "second_accepted":
+		_spawn_enemy_wave(_followup_enemy_specs())
+		return
+	_spawn_enemy_wave(_initial_enemy_specs())
+
+
+func _initial_enemy_specs() -> Array:
+	return [
 		["寒岭门客", Vector3(2.8, 0.0, 1.5), 54],
 		["黑衣暗桩", Vector3(5.2, 0.0, 4.5), 72],
 		["寂音武僧", Vector3(6.2, 0.0, -2.8), 96],
 	]
+
+
+func _followup_enemy_specs() -> Array:
+	return [
+		["寒岭追骑", Vector3(-8.0, 0.0, -1.4), 112],
+		["武氏刀客", Vector3(-5.8, 0.0, -3.0), 128],
+	]
+
+
+func _spawn_enemy_wave(specs: Array) -> void:
 	for spec in specs:
 		var enemy: WuxiaActor3D = Actor.new()
 		enemy.display_name = spec[0]
@@ -434,6 +454,8 @@ func _spawn_loot(enemy_name: String, at: Vector3) -> void:
 		item_id = "cold_iron"
 	elif enemy_name == "寂音武僧":
 		item_id = "monk_bracer"
+	elif enemy_name in ["寒岭追骑", "武氏刀客"]:
+		item_id = "cold_iron"
 	var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
 	var loot: LootPickup3D = LootPickup.new()
 	loot.configure(item_id, str(definition["name"]), 1)
@@ -480,7 +502,9 @@ func _create_hud() -> void:
 	status.add_child(portrait)
 	_add_label(portrait, "侠", Vector2(5, 4), Vector2(64, 64), 34, Color("#e5cb82"), true)
 	_add_label(status, "青冥门少侠", Vector2(98, 11), Vector2(150, 25), 18, Color("#f0e6c8"))
-	_add_label(status, "八品 · 青冥门", Vector2(245, 13), Vector2(82, 22), 12, Color("#9fc7ad"), true)
+	level_label = _add_label(
+		status, "", Vector2(245, 13), Vector2(82, 22), 12, Color("#9fc7ad"), true
+	)
 	health_bar = ProgressBar.new()
 	health_bar.position = Vector2(98, 41)
 	health_bar.size = Vector2(226, 14)
@@ -591,10 +615,13 @@ func _create_hud() -> void:
 
 
 func _refresh_hud() -> void:
+	health_bar.max_value = GameState.player_max_health
 	health_bar.value = GameState.player_health
 	health_label.text = "%d / %d" % [GameState.player_health, GameState.player_max_health]
+	inner_power_bar.max_value = GameState.player_max_inner_power
 	inner_power_bar.value = GameState.player_inner_power
 	experience_bar.value = GameState.player_experience
+	level_label.text = "%d境 · 青冥门" % GameState.player_level
 	silver_label.text = "◆ 碎银  %d" % GameState.silver
 	match GameState.quest_state:
 		"available":
@@ -602,13 +629,32 @@ func _refresh_hud() -> void:
 			quest_description_label.text = "沈砚正在渡口商道旁等待少侠。"
 			quest_count.text = "点击追踪前往"
 		"accepted":
-			quest_title_label.text = "◆ 云津渡伏兵"
-			quest_description_label.text = "清剿寒岭武氏潜伏在渡口的暗桩。"
+			quest_title_label.text = (
+				"◆ 护送商旅" if GameState.quest_route == "protect"
+				else "◆ 追查铜签"
+			)
+			quest_description_label.text = (
+				"清除商道伏兵，确保百姓安全撤离。"
+				if GameState.quest_route == "protect"
+				else "击败暗桩，搜集寒岭武氏的涉案凭证。"
+			)
 			quest_count.text = "%d / 3 名敌人已清剿" % (3 - enemies.size())
 		"ready":
 			quest_title_label.text = "◆ 向沈砚复命"
 			quest_description_label.text = "伏兵已经清剿，返回巡检处领取酬劳。"
 			quest_count.text = "任务可以交付"
+		"followup_available":
+			quest_title_label.text = "◆ 寒岭追兵"
+			quest_description_label.text = "沈砚查明铜签来路，似有追兵正赶往渡口。"
+			quest_count.text = "与沈砚继续交谈"
+		"second_accepted":
+			quest_title_label.text = "◆ 截击寒岭追兵"
+			quest_description_label.text = "追兵企图灭口，在渡口北侧截住他们。"
+			quest_count.text = "%d / 2 名追兵已击退" % (2 - enemies.size())
+		"second_ready":
+			quest_title_label.text = "◆ 云津渡复命"
+			quest_description_label.text = "追兵已经击退，向沈砚禀明结果。"
+			quest_count.text = "序章可以交付"
 		"completed":
 			quest_title_label.text = "◇ 云津渡风波已平"
 			quest_description_label.text = "渡口暂时恢复了往日秩序。"
@@ -642,7 +688,7 @@ func _activate_skill(skill_name: String) -> void:
 
 
 func _track_quest() -> void:
-	if GameState.quest_state in ["available", "ready"]:
+	if GameState.quest_state in ["available", "ready", "followup_available", "second_ready"]:
 		_command_talk_to_npc(quest_npc)
 		return
 	if GameState.quest_state == "completed":
@@ -715,12 +761,14 @@ func _open_character_window() -> void:
 	_add_label(active_window, "青冥门少侠", Vector2(24, 52), Vector2(230, 30), 22, Color("#eddbad"))
 	_add_label(
 		active_window,
-		"境界：八品\n气血：%d / %d\n内力：%d / %d\n外功攻击：%d\n外功防御：%d" % [
+		"境界：第%d境\n经验：%d / 100\n气血：%d / %d\n内力：%d / %d\n外功攻击：%d\n外功防御：%d\n云津渡声望：%d" % [
+			GameState.player_level, GameState.player_experience,
 			GameState.player_health, GameState.player_max_health,
 			GameState.player_inner_power, GameState.player_max_inner_power,
-			GameState.get_attack(), GameState.get_defense()
+			GameState.get_attack(), GameState.get_defense(),
+			GameState.cloud_ford_reputation
 		],
-		Vector2(24, 96), Vector2(190, 160), 16, Color("#d8d0ba")
+		Vector2(24, 96), Vector2(200, 230), 15, Color("#d8d0ba")
 	)
 	_add_label(active_window, "当前装备", Vector2(247, 54), Vector2(160, 26), 17, Color("#cda95e"))
 	var slot_names := {"weapon": "兵刃", "armor": "护具", "accessory": "饰物"}
@@ -768,7 +816,21 @@ func _open_quest_window() -> void:
 		active_window, details, Vector2(24, 105), Vector2(410, 80),
 		15, Color("#d4ccb6")
 	)
-	var track := _button(active_window, "追踪任务", Vector2(24, 205), Vector2(130, 42))
+	var route_name := "尚未抉择"
+	if GameState.quest_route == "protect":
+		route_name = "护送百姓"
+	elif GameState.quest_route == "investigate":
+		route_name = "追查证据"
+	var progress_text := "行动路线：%s\n云津渡声望：%d" % [
+		route_name, GameState.cloud_ford_reputation
+	]
+	if GameState.quest_route == "investigate":
+		progress_text += "\n已取得铜签：%d / 3" % GameState.evidence_count
+	_add_label(
+		active_window, progress_text, Vector2(24, 176), Vector2(410, 72),
+		14, Color("#a9c5b3")
+	)
+	var track := _button(active_window, "追踪任务", Vector2(24, 270), Vector2(130, 42))
 	track.pressed.connect(_track_quest)
 
 
@@ -786,39 +848,86 @@ func _handle_inventory_item(item_id: String) -> void:
 
 func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
 	_close_active_window()
-	active_window = _window("渡口巡检·沈砚", "对话", Vector2(365, 375), Vector2(550, 245))
+	active_window = _window("渡口巡检·沈砚", "对话", Vector2(365, 350), Vector2(550, 285))
+	if GameState.quest_state == "available":
+		var choice_text := (
+			"寒岭武氏的暗桩混入云津渡。眼下有两件急事：商旅被困在商道，"
+			+ "而失踪者附近又发现了可疑铜签。少侠只能先顾一头。"
+		)
+		_add_label(
+			active_window, choice_text, Vector2(24, 54), Vector2(502, 78),
+			16, Color("#e5ddc9")
+		).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var protect := _button(
+			active_window, "护送百姓\n声望奖励较高",
+			Vector2(24, 150), Vector2(190, 62)
+		)
+		protect.pressed.connect(_choose_quest_route.bind("protect"))
+		var investigate := _button(
+			active_window, "追查证据\n材料奖励较多",
+			Vector2(228, 150), Vector2(190, 62)
+		)
+		investigate.pressed.connect(_choose_quest_route.bind("investigate"))
+		var leave_choice := _button(active_window, "容我想想", Vector2(432, 150), Vector2(94, 62))
+		leave_choice.pressed.connect(_close_active_window)
+		return
 	var dialogue := ""
 	var action_text := ""
 	var action: Callable
 	match GameState.quest_state:
-		"available":
-			dialogue = "少侠来得正好。寒岭武氏的暗桩混入云津渡，商旅已接连失踪。可愿助我清剿三名伏兵？"
-			action_text = "接受委托"
-			action = _accept_quest
 		"accepted":
-			dialogue = "暗桩仍潜伏在渡口各处。此事不宜惊动乡勇，还请少侠谨慎行事。"
+			dialogue = (
+				"商道局势未定。先按少侠选定的办法行事，清除三名暗桩后再来找我。"
+			)
 			action_text = "我这便去"
 			action = _close_active_window
 		"ready":
-			dialogue = "方才有人来报，三名暗桩都已伏诛。少侠此举救下了往来的百姓，这是约定的酬劳。"
-			action_text = "交付任务"
+			dialogue = (
+				"三名暗桩已经伏诛。无论是护住商旅还是取得铜签，"
+				+ "少侠都替云津渡解了燃眉之急。这是第一份酬劳。"
+			)
+			action_text = "领取酬劳"
+			action = _turn_in_quest
+		"followup_available":
+			if GameState.quest_route == "protect":
+				dialogue = (
+					"获救商旅认出一名寒岭眼线。方才哨探又见两名精锐自北岸赶来，"
+					+ "多半是要灭口。若放他们过桥，先前所做便会前功尽弃。"
+				)
+			else:
+				dialogue = (
+					"铜签的刻痕指向寒岭武氏。方才哨探又见两名精锐自北岸赶来，"
+					+ "多半是要灭口。若放他们过桥，先前所做便会前功尽弃。"
+				)
+			action_text = "截击追兵"
+			action = _accept_followup
+		"second_accepted":
+			dialogue = "两名追兵正在渡口北侧游弋。此战比先前凶险，少侠务必备好药物。"
+			action_text = "前往迎敌"
+			action = _close_active_window
+		"second_ready":
+			dialogue = (
+				"追兵已退，商道和证据都保住了。此刀是从武氏兵器库流出的旧物，"
+				+ "便赠给少侠防身。云津渡百姓也会记得今日之事。"
+			)
+			action_text = "完成序章"
 			action = _turn_in_quest
 		"completed":
-			dialogue = "渡口虽已平静，寒岭武氏绝不会善罢甘休。日后若有线索，我会遣人通知少侠。"
+			dialogue = "渡口虽已平静，寒岭武氏绝不会善罢甘休。寂音禅院似乎也与失踪商旅有关。"
 			action_text = "告辞"
 			action = _close_active_window
 	_add_label(
 		active_window, dialogue, Vector2(24, 56), Vector2(502, 92),
 		16, Color("#e5ddc9")
 	).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var action_button := _button(active_window, action_text, Vector2(292, 170), Vector2(110, 42))
+	var action_button := _button(active_window, action_text, Vector2(292, 205), Vector2(110, 42))
 	action_button.pressed.connect(action)
-	var leave := _button(active_window, "离开", Vector2(416, 170), Vector2(110, 42))
+	var leave := _button(active_window, "离开", Vector2(416, 205), Vector2(110, 42))
 	leave.pressed.connect(_close_active_window)
 
 
-func _accept_quest() -> void:
-	GameState.accept_quest()
+func _choose_quest_route(route: String) -> void:
+	GameState.choose_quest_route(route)
 	if enemies.is_empty():
 		GameState.mark_quest_ready()
 	AudioManager.play_quest()
@@ -826,11 +935,22 @@ func _accept_quest() -> void:
 	_close_active_window()
 
 
+func _accept_followup() -> void:
+	GameState.accept_followup()
+	_spawn_enemy_wave(_followup_enemy_specs())
+	AudioManager.play_quest()
+	_save_current_game()
+	_close_active_window()
+
+
 func _turn_in_quest() -> void:
-	if GameState.quest_state != "ready":
+	if GameState.quest_state not in ["ready", "second_ready"]:
 		return
 	_close_active_window()
-	GameState.finish_quest()
+	if GameState.quest_state == "ready":
+		GameState.finish_first_quest()
+	else:
+		GameState.finish_quest()
 	AudioManager.play_quest()
 	_save_current_game()
 

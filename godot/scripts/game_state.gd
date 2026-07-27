@@ -24,6 +24,10 @@ const ITEM_DEFINITIONS := {
 		"name": "青冥玉符", "type": "accessory", "attack": 2, "defense": 2,
 		"description": "沈砚赠予的青玉信物，刻有青冥云纹。"
 	},
+	"hanling_blade": {
+		"name": "寒岭雁翎刀", "type": "weapon", "attack": 9,
+		"description": "从寒岭追兵手中缴获的精钢长刀，锋口沉稳。"
+	},
 }
 const SAVE_VERSION := 1
 const SAVE_PATH := "user://luodong_save.json"
@@ -41,6 +45,9 @@ var silver: int = 0
 var selected_skill: String = "青冥剑式"
 var quest_text: String = "拜访渡口巡检"
 var quest_state: String = "available"
+var quest_route: String = ""
+var cloud_ford_reputation: int = 0
+var evidence_count: int = 0
 var inventory: Array[Dictionary] = []
 var equipment := {"weapon": "", "armor": "", "accessory": ""}
 var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
@@ -55,6 +62,11 @@ func _ready() -> void:
 
 
 func reset() -> void:
+	player_max_health = 100
+	player_max_inner_power = 100
+	player_level = 8
+	base_attack = 18
+	base_defense = 5
 	player_health = player_max_health
 	player_inner_power = 82
 	player_experience = 36
@@ -62,6 +74,9 @@ func reset() -> void:
 	selected_skill = "青冥剑式"
 	quest_text = "拜访渡口巡检"
 	quest_state = "available"
+	quest_route = ""
+	cloud_ford_reputation = 0
+	evidence_count = 0
 	inventory = [
 		{"id": "worn_sword", "count": 1},
 		{"id": "healing_salve", "count": 2},
@@ -157,26 +172,90 @@ func get_item_count(item_id: String) -> int:
 	return 0
 
 
-func accept_quest() -> void:
+func choose_quest_route(route: String) -> void:
+	if route not in ["protect", "investigate"] or quest_state != "available":
+		return
+	quest_route = route
 	quest_state = "accepted"
-	quest_text = "清剿云津渡伏兵"
-	set_message("已接受任务“云津渡伏兵”，清剿潜伏在渡口的三名暗桩。")
+	if route == "protect":
+		quest_text = "护送商旅离开伏击区"
+		set_message("选择“护送百姓”：清除商道上的三名伏兵，确保商旅安全撤离。")
+	else:
+		quest_text = "追查失踪商旅的线索"
+		set_message("选择“追查证据”：击败三名暗桩，搜寻寒岭武氏留下的线索。")
 
 
 func mark_quest_ready() -> void:
-	if quest_state != "accepted":
+	if quest_state == "accepted":
+		quest_state = "ready"
+		quest_text = "向沈砚复命"
+		if quest_route == "investigate":
+			evidence_count = 3
+			set_message("三枚寒岭铜签已经收齐。返回沈砚处查验线索。")
+		else:
+			set_message("商旅已经安全撤离。返回渡口巡检沈砚处复命。")
+	elif quest_state == "second_accepted":
+		quest_state = "second_ready"
+		quest_text = "击退追兵，向沈砚复命"
+		set_message("寒岭追兵已经击退。返回沈砚处结束云津渡风波。")
+
+
+func finish_first_quest() -> void:
+	if quest_state != "ready":
 		return
-	quest_state = "ready"
-	quest_text = "向沈砚复命"
-	set_message("伏兵已经清剿。返回渡口巡检沈砚处复命。")
+	quest_state = "followup_available"
+	quest_text = "查问寒岭追兵"
+	add_silver(25)
+	add_experience(30)
+	add_item("qingming_charm", 1)
+	if quest_route == "protect":
+		cloud_ford_reputation += 2
+		add_item("healing_salve", 2)
+		set_message("商旅感念相救：获得碎银 25 两、金疮药与青冥玉符。")
+	else:
+		cloud_ford_reputation += 1
+		add_item("cold_iron", 2)
+		set_message("铜签证实寒岭武氏涉案：获得碎银 25 两、寒铁与青冥玉符。")
+
+
+func accept_followup() -> void:
+	if quest_state != "followup_available":
+		return
+	quest_state = "second_accepted"
+	quest_text = "截击寒岭追兵"
+	set_message("寒岭武氏派出追兵灭口。前往渡口北侧截击两名精锐。")
 
 
 func finish_quest() -> void:
+	if quest_state != "second_ready":
+		return
 	quest_state = "completed"
 	quest_text = "云津渡风波已平"
 	add_silver(50)
-	add_item("qingming_charm", 1)
-	set_message("任务完成：获得碎银 50 两与青冥玉符。")
+	add_experience(45)
+	add_item("hanling_blade", 1)
+	equip_item("hanling_blade")
+	cloud_ford_reputation += 2
+	set_message("序章完成：寒岭雁翎刀已自动装备，云津渡声望与境界均获提升。")
+
+
+func add_experience(amount: int) -> bool:
+	if amount <= 0:
+		return false
+	var leveled_up := false
+	player_experience += amount
+	while player_experience >= 100:
+		player_experience -= 100
+		player_level += 1
+		player_max_health += 12
+		player_max_inner_power += 5
+		base_attack += 2
+		base_defense += 1
+		player_health = player_max_health
+		player_inner_power = player_max_inner_power
+		leveled_up = true
+	state_changed.emit()
+	return leveled_up
 
 
 func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
@@ -185,15 +264,22 @@ func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
 		"saved_at": Time.get_datetime_string_from_system(),
 		"player": {
 			"health": player_health,
+			"max_health": player_max_health,
 			"inner_power": player_inner_power,
+			"max_inner_power": player_max_inner_power,
 			"experience": player_experience,
 			"level": player_level,
+			"base_attack": base_attack,
+			"base_defense": base_defense,
 			"silver": silver,
 			"selected_skill": selected_skill,
 		},
 		"quest": {
 			"text": quest_text,
 			"state": quest_state,
+			"route": quest_route,
+			"cloud_ford_reputation": cloud_ford_reputation,
+			"evidence_count": evidence_count,
 		},
 		"inventory": inventory.duplicate(true),
 		"equipment": equipment.duplicate(true),
@@ -216,17 +302,24 @@ func load_game(path := SAVE_PATH) -> Dictionary:
 	if not (parsed is Dictionary) or int(parsed.get("version", 0)) != SAVE_VERSION:
 		return {}
 	var player_data: Dictionary = parsed.get("player", {})
+	player_max_health = maxi(1, int(player_data.get("max_health", 100)))
+	player_max_inner_power = maxi(1, int(player_data.get("max_inner_power", 100)))
+	player_level = maxi(1, int(player_data.get("level", 8)))
+	base_attack = maxi(1, int(player_data.get("base_attack", 18)))
+	base_defense = maxi(0, int(player_data.get("base_defense", 5)))
 	player_health = clampi(int(player_data.get("health", 100)), 0, player_max_health)
 	player_inner_power = clampi(
 		int(player_data.get("inner_power", 82)), 0, player_max_inner_power
 	)
 	player_experience = int(player_data.get("experience", 36))
-	player_level = int(player_data.get("level", 8))
 	silver = int(player_data.get("silver", 0))
 	selected_skill = str(player_data.get("selected_skill", "青冥剑式"))
 	var quest_data: Dictionary = parsed.get("quest", {})
 	quest_text = str(quest_data.get("text", "拜访渡口巡检"))
 	quest_state = str(quest_data.get("state", "available"))
+	quest_route = str(quest_data.get("route", ""))
+	cloud_ford_reputation = int(quest_data.get("cloud_ford_reputation", 0))
+	evidence_count = int(quest_data.get("evidence_count", 0))
 	inventory.assign(parsed.get("inventory", []))
 	equipment = parsed.get(
 		"equipment", {"weapon": "worn_sword", "armor": "", "accessory": ""}

@@ -8,7 +8,12 @@
     {
       "id": "cloud-ford",
       "title": "云津渡风波",
-      "summary": "两县大族争夺渡口商埠，玩家需在调停、取证与护民之间作出选择。"
+      "summary": "两县大族争夺渡口商埠，玩家需在调停、取证与护民之间作出选择。",
+      "routes": [
+        { "id": "protect", "title": "护送百姓", "rewardFocus": "区域声望与药品" },
+        { "id": "investigate", "title": "追查证据", "rewardFocus": "涉案铜签与锻造材料" }
+      ],
+      "stages": ["清剿三名暗桩", "领取路线奖励", "截击两名寒岭追兵", "获得进阶兵器"]
     },
     {
       "id": "hanling-plot",
