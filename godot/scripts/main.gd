@@ -57,6 +57,7 @@ var skill_cooldowns := {
 }
 var inner_power_regen_buffer := 0.0
 var hud_layer: CanvasLayer
+var hud_portrait_viewport: SubViewport
 var active_window: Panel
 var restored_world: Dictionary = {}
 var environment_label: Label
@@ -899,7 +900,7 @@ func _create_hud() -> void:
 	hud.add_child(status)
 	var portrait := _panel(Vector2(12, 16), Vector2(74, 74), Color("#17352d"))
 	status.add_child(portrait)
-	_add_label(portrait, "侠", Vector2(5, 4), Vector2(64, 64), 34, Color("#e5cb82"), true)
+	_create_live_player_portrait(portrait)
 	_add_label(status, "青冥门少侠", Vector2(98, 11), Vector2(150, 25), 18, Color("#f0e6c8"))
 	level_label = _add_label(
 		status, "", Vector2(245, 13), Vector2(82, 22), 12, Color("#9fc7ad"), true
@@ -1081,6 +1082,61 @@ func _create_hud() -> void:
 	var system := _button(currency, "系统", Vector2(71, 51), Vector2(97, 34))
 	system.add_theme_font_size_override("font_size", 12)
 	system.pressed.connect(_open_system_window)
+
+
+func _create_live_player_portrait(parent: Control) -> void:
+	var container := SubViewportContainer.new()
+	container.name = "动态角色头像"
+	container.position = Vector2(3, 3)
+	container.size = Vector2(68, 68)
+	container.stretch = true
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(container)
+
+	hud_portrait_viewport = SubViewport.new()
+	hud_portrait_viewport.name = "角色头像视口"
+	hud_portrait_viewport.size = Vector2i(160, 160)
+	hud_portrait_viewport.own_world_3d = true
+	hud_portrait_viewport.transparent_bg = true
+	hud_portrait_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	hud_portrait_viewport.msaa_3d = Viewport.MSAA_2X
+	container.add_child(hud_portrait_viewport)
+
+	var portrait_world := Node3D.new()
+	portrait_world.name = "角色头像世界"
+	hud_portrait_viewport.add_child(portrait_world)
+
+	var key_light := DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-38, -28, 0)
+	key_light.light_color = Color("#ffe4b1")
+	key_light.light_energy = 1.35
+	portrait_world.add_child(key_light)
+
+	var fill_light := OmniLight3D.new()
+	fill_light.position = Vector3(-1.3, 1.6, 1.2)
+	fill_light.omni_range = 4.0
+	fill_light.light_color = Color("#78a99d")
+	fill_light.light_energy = 1.25
+	portrait_world.add_child(fill_light)
+
+	var portrait_camera := Camera3D.new()
+	portrait_camera.name = "角色头像镜头"
+	portrait_camera.position = Vector3(0, 1.48, 3.15)
+	portrait_camera.fov = 27.0
+	portrait_world.add_child(portrait_camera)
+	portrait_camera.look_at(Vector3(0, 1.28, 0), Vector3.UP)
+
+	var portrait_actor := Actor.new()
+	portrait_actor.name = "头像少侠"
+	portrait_actor.display_name = ""
+	portrait_actor.visual_variant = "hero"
+	portrait_actor.hostile = false
+	portrait_actor.position = Vector3(0, 0, 0)
+	portrait_world.add_child(portrait_actor)
+	if is_instance_valid(portrait_actor.nameplate):
+		portrait_actor.nameplate.visible = false
+	if is_instance_valid(portrait_actor.selection_disc):
+		portrait_actor.selection_disc.visible = false
 
 
 func _refresh_hud() -> void:
@@ -2023,8 +2079,39 @@ func _panel(at: Vector2, panel_size: Vector2, color: Color) -> Panel:
 	panel.position = at
 	panel.size = panel_size
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", _style(color, 7, Color("#746246")))
+	panel.add_theme_stylebox_override("panel", _style(color, 4, Color("#746246")))
+	_decorate_panel(panel)
 	return panel
+
+
+func _decorate_panel(panel: Panel) -> void:
+	var accent := Color(0.78, 0.63, 0.31, 0.72)
+	var edge := 13.0
+	var thickness := 2.0
+	var segments := [
+		[Vector2(3, 3), Vector2(edge, thickness)],
+		[Vector2(3, 3), Vector2(thickness, edge)],
+		[Vector2(panel.size.x - edge - 3, 3), Vector2(edge, thickness)],
+		[Vector2(panel.size.x - 5, 3), Vector2(thickness, edge)],
+		[Vector2(3, panel.size.y - 5), Vector2(edge, thickness)],
+		[Vector2(3, panel.size.y - edge - 3), Vector2(thickness, edge)],
+		[
+			Vector2(panel.size.x - edge - 3, panel.size.y - 5),
+			Vector2(edge, thickness),
+		],
+		[
+			Vector2(panel.size.x - 5, panel.size.y - edge - 3),
+			Vector2(thickness, edge),
+		],
+	]
+	for index in segments.size():
+		var stroke := ColorRect.new()
+		stroke.name = "鎏金角饰%d" % index
+		stroke.position = segments[index][0]
+		stroke.size = segments[index][1]
+		stroke.color = accent
+		stroke.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(stroke)
 
 
 func _style(color: Color, radius: int, border := Color.TRANSPARENT) -> StyleBoxFlat:
@@ -2040,6 +2127,9 @@ func _style(color: Color, radius: int, border := Color.TRANSPARENT) -> StyleBoxF
 		style.border_width_right = 1
 		style.border_width_bottom = 1
 		style.border_color = border
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0, 2)
 	return style
 
 

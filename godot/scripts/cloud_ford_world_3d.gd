@@ -23,6 +23,7 @@ var rest_marker: Node3D
 var rest_marker_label: Label3D
 var rest_marker_ring: MeshInstance3D
 var rest_marker_material: StandardMaterial3D
+var river_surface: MeshInstance3D
 
 
 func _ready() -> void:
@@ -237,9 +238,13 @@ func _create_environment() -> void:
 	environment.background_color = Color("#9aab98")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("#d7d1b8")
-	environment.ambient_light_energy = 0.5
+	environment.ambient_light_energy = 0.4
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.tonemap_exposure = 0.88
+	environment.tonemap_exposure = 0.74
+	environment.adjustment_enabled = true
+	environment.adjustment_brightness = 0.94
+	environment.adjustment_contrast = 1.1
+	environment.adjustment_saturation = 0.88
 	environment.fog_enabled = true
 	environment.fog_light_color = Color("#aeb8a4")
 	environment.fog_density = 0.013
@@ -251,7 +256,7 @@ func _create_environment() -> void:
 	sunlight = DirectionalLight3D.new()
 	sunlight.rotation_degrees = Vector3(-54.0, -32.0, 0.0)
 	sunlight.light_color = Color("#f3d8a3")
-	sunlight.light_energy = 1.0
+	sunlight.light_energy = 0.82
 	sunlight.shadow_enabled = true
 	world_root.add_child(sunlight)
 	_update_environment()
@@ -269,13 +274,13 @@ func _update_environment() -> void:
 		world_time * 360.0 - 90.0,
 		0.0
 	)
-	sunlight.light_energy = 0.1 + daylight * 0.94
+	sunlight.light_energy = 0.08 + daylight * 0.78
 	sunlight.light_color = Color("#f2c27f").lerp(Color("#fff0ca"), daylight)
 	environment.background_color = Color("#182735").lerp(Color("#91a899"), daylight)
 	environment.ambient_light_color = Color("#344a5c").lerp(
 		Color("#d7d1b8"), daylight
 	)
-	environment.ambient_light_energy = 0.28 + daylight * 0.28
+	environment.ambient_light_energy = 0.24 + daylight * 0.23
 	environment.fog_light_color = Color("#465c66").lerp(
 		Color("#aeb8a4"), daylight
 	)
@@ -287,9 +292,11 @@ func _update_environment() -> void:
 
 
 func _create_landscape() -> void:
-	_box("渡口地面", Vector3(0, -0.35, -1), Vector3(26, 0.7, 17), Color("#667558"))
-	_box("商道路面", Vector3(-1.0, 0.02, -1.2), Vector3(5.0, 0.08, 17), Color("#8f8062"))
-	_box("河道", Vector3(8.7, -0.05, -1.0), Vector3(7.6, 0.18, 17.0), Color("#477b82"), 0.18)
+	_box("渡口地面", Vector3(0, -0.35, -1), Vector3(26, 0.7, 17), Color("#536253"))
+	_box("商道路面", Vector3(-1.0, 0.02, -1.2), Vector3(5.0, 0.08, 17), Color("#756951"))
+	_create_river_surface()
+	_create_road_stones()
+	_create_riverbanks()
 
 	for index in range(9):
 		_box(
@@ -301,13 +308,149 @@ func _create_landscape() -> void:
 	_box("桥栏左", Vector3(8.7, 0.82, -0.15), Vector3(7.5, 0.12, 0.12), Color("#4d382a"))
 	_box("桥栏右", Vector3(8.7, 0.82, 2.15), Vector3(7.5, 0.12, 0.12), Color("#4d382a"))
 
-	for index in range(6):
-		_box(
+	for index in range(7):
+		_create_mountain(
 			"远山%d" % index,
-			Vector3(-12.0 + index * 5.0, 2.1 + index % 2, -10.5),
-			Vector3(6.0, 4.5 + index % 2, 3.0),
-			Color("#4c5f4e")
+			Vector3(-14.0 + index * 4.8, -0.25, -11.2 - float(index % 2) * 0.8),
+			3.8 + float(index % 3) * 0.65,
+			5.4 + float((index + 1) % 3) * 1.2,
+			Color("#344b42").lerp(Color("#607163"), float(index) / 12.0)
 		)
+
+
+func _create_river_surface() -> void:
+	river_surface = MeshInstance3D.new()
+	river_surface.name = "动态云津河面"
+	river_surface.position = Vector3(8.7, 0.055, -1.0)
+	var river_mesh := PlaneMesh.new()
+	river_mesh.size = Vector2(7.6, 17.0)
+	river_mesh.subdivide_width = 56
+	river_mesh.subdivide_depth = 96
+	var water_shader := Shader.new()
+	water_shader.code = """
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley;
+
+uniform vec4 deep_color : source_color = vec4(0.08, 0.25, 0.29, 1.0);
+uniform vec4 shallow_color : source_color = vec4(0.24, 0.49, 0.50, 1.0);
+
+void vertex() {
+	float long_wave = sin(VERTEX.x * 1.7 + TIME * 0.8) * 0.008;
+	float cross_wave = sin(VERTEX.z * 2.4 - TIME * 1.1) * 0.006;
+	VERTEX.y += long_wave + cross_wave;
+}
+
+void fragment() {
+	float ripple_a = sin((UV.x * 7.0 + UV.y * 3.0 + TIME * 0.16) * 12.0);
+	float ripple_b = sin((UV.y * 11.0 - UV.x * 2.0 - TIME * 0.22) * 8.0);
+	float ripple = ripple_a * 0.5 + ripple_b * 0.5;
+	vec3 water = mix(deep_color.rgb, shallow_color.rgb, 0.42 + ripple * 0.025);
+	ALBEDO = water;
+	ROUGHNESS = 0.46;
+	METALLIC = 0.04;
+	SPECULAR = 0.62;
+}
+"""
+	var water_material := ShaderMaterial.new()
+	water_material.shader = water_shader
+	river_mesh.material = water_material
+	river_surface.mesh = river_mesh
+	world_root.add_child(river_surface)
+
+
+func _create_road_stones() -> void:
+	var stone_colors := [Color("#756b57"), Color("#9a896c"), Color("#665f50")]
+	for row in range(13):
+		for column in range(3):
+			var offset := float((row + column) % 2) * 0.16
+			var stone := MeshInstance3D.new()
+			stone.name = "商道青石_%d_%d" % [row, column]
+			stone.position = Vector3(
+				-2.25 + column * 1.22 + offset,
+				0.085,
+				-7.65 + row * 1.08
+			)
+			stone.rotation_degrees.y = float((row * 17 + column * 31) % 24) - 12.0
+			var stone_mesh := BoxMesh.new()
+			stone_mesh.size = Vector3(
+				0.76 + float((row + column) % 3) * 0.07,
+				0.075,
+				0.58 + float((row * 2 + column) % 3) * 0.06
+			)
+			stone_mesh.material = _material(
+				stone_colors[(row + column) % stone_colors.size()],
+				0.0,
+				0.96
+			)
+			stone.mesh = stone_mesh
+			world_root.add_child(stone)
+
+
+func _create_riverbanks() -> void:
+	for index in range(18):
+		var bank_z := -8.0 + index * 0.92
+		var bank_x := 5.2 + sin(float(index) * 1.7) * 0.16
+		var rock := MeshInstance3D.new()
+		rock.name = "河岸石_%d" % index
+		rock.position = Vector3(bank_x, 0.04, bank_z)
+		rock.rotation_degrees.y = float(index * 29 % 180)
+		rock.scale = Vector3(
+			0.58 + float(index % 4) * 0.08,
+			0.36 + float((index + 1) % 3) * 0.06,
+			0.48 + float((index + 2) % 4) * 0.08
+		)
+		var rock_mesh := SphereMesh.new()
+		rock_mesh.radius = 0.25
+		rock_mesh.height = 0.5
+		rock_mesh.radial_segments = 10
+		rock_mesh.rings = 5
+		rock_mesh.material = _material(
+			Color("#3f4b45").lerp(Color("#665f4e"), float(index % 5) / 9.0),
+			0.0,
+			0.96
+		)
+		rock.mesh = rock_mesh
+		world_root.add_child(rock)
+
+
+func _create_mountain(
+	node_name: String,
+	at: Vector3,
+	radius: float,
+	height: float,
+	color: Color
+) -> void:
+	var mountain := MeshInstance3D.new()
+	mountain.name = node_name
+	mountain.position = at + Vector3(0, height * 0.5, 0)
+	mountain.rotation_degrees.y = float(node_name.hash() % 360)
+	mountain.scale.z = 0.7
+	var mountain_mesh := CylinderMesh.new()
+	mountain_mesh.top_radius = radius * 0.08
+	mountain_mesh.bottom_radius = radius
+	mountain_mesh.height = height
+	mountain_mesh.radial_segments = 9
+	mountain_mesh.rings = 5
+	mountain_mesh.material = _material(color, 0.0, 1.0)
+	mountain.mesh = mountain_mesh
+	world_root.add_child(mountain)
+
+	var mist_band := MeshInstance3D.new()
+	mist_band.name = "%s山岚" % node_name
+	mist_band.position = at + Vector3(0, height * 0.32, 0.3)
+	mist_band.scale.z = 0.72
+	var mist_mesh := CylinderMesh.new()
+	mist_mesh.top_radius = radius * 0.67
+	mist_mesh.bottom_radius = radius * 0.76
+	mist_mesh.height = 0.42
+	mist_mesh.radial_segments = 9
+	var mist_material := StandardMaterial3D.new()
+	mist_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mist_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mist_material.albedo_color = Color(0.72, 0.78, 0.72, 0.18)
+	mist_mesh.material = mist_material
+	mist_band.mesh = mist_mesh
+	world_root.add_child(mist_band)
 
 
 func _create_settlement() -> void:

@@ -143,6 +143,23 @@ func _ready() -> void:
 	_expect(smith_actor.status_marker.text == "锻", "铁匠头顶应显示常驻功能标识")
 	var cloud_world = main_scene.get("world")
 	_expect(is_instance_valid(cloud_world.rest_marker), "云津渡应包含可点击的茶棚休整设施")
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("动态云津河面"))
+		and (
+			cloud_world.world_root.get_node("动态云津河面") as MeshInstance3D
+		).mesh.material is ShaderMaterial,
+		"云津河面应使用带动态波纹的 3D 水体材质而不是平面色块"
+	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("远山0"))
+		and is_instance_valid(cloud_world.world_root.get_node_or_null("远山0山岚")),
+		"云津渡远景应由山体和半透明山岚构成，不再使用方盒远山"
+	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("商道青石_0_0"))
+		and is_instance_valid(cloud_world.world_root.get_node_or_null("河岸石_0")),
+		"商道与河岸应具备独立青石和自然岸线层次"
+	)
 	var imported_inn: Node = cloud_world.world_root.get_node_or_null("临河客栈")
 	_expect(is_instance_valid(imported_inn), "云津渡应生成临河客栈")
 	_expect(
@@ -198,6 +215,19 @@ func _ready() -> void:
 		"临水茶亭应包含可辨识的明式歇山屋顶"
 	)
 	_expect(main_scene.get("skill_cooldown_overlays").size() == 5, "五个武学槽位都应具备冷却遮罩")
+	var portrait_viewport := main_scene.get("hud_portrait_viewport") as SubViewport
+	_expect(
+		is_instance_valid(portrait_viewport)
+		and portrait_viewport.own_world_3d
+		and is_instance_valid(portrait_viewport.get_node_or_null("角色头像世界/头像少侠")),
+		"玩家状态框应渲染真实 3D 角色头像而不是文字占位"
+	)
+	var chapter_panel := main_scene.get("chapter_label").get_parent() as Panel
+	_expect(
+		is_instance_valid(chapter_panel.get_node_or_null("鎏金角饰0"))
+		and is_instance_valid(chapter_panel.get_node_or_null("鎏金角饰7")),
+		"网游 HUD 面板应使用统一鎏金角饰和阴影层次"
+	)
 	main_scene.get("skill_cooldowns")["踏燕行"] = 3.0
 	main_scene.call("_refresh_skill_buttons")
 	_expect(
