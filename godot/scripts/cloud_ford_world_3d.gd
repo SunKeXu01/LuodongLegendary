@@ -4,6 +4,7 @@ extends SubViewportContainer
 const KAYKIT_MEDIEVAL := "res://assets/vendor/kaykit_medieval/"
 const POLYGONAL_TEMPLE := "res://assets/vendor/polygonal_mind/tomb_chaser_2/"
 const POLYGONAL_LUNAR := "res://assets/vendor/polygonal_mind/lunar_year/"
+const POLY_HAVEN := "res://assets/vendor/poly_haven/"
 
 var world_viewport: SubViewport
 var world_root: Node3D
@@ -24,6 +25,8 @@ var rest_marker_label: Label3D
 var rest_marker_ring: MeshInstance3D
 var rest_marker_material: StandardMaterial3D
 var river_surface: MeshInstance3D
+var terrain_pbr_material: StandardMaterial3D
+var road_pbr_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -292,8 +295,30 @@ func _update_environment() -> void:
 
 
 func _create_landscape() -> void:
-	_box("渡口地面", Vector3(0, -0.35, -1), Vector3(26, 0.7, 17), Color("#536253"))
-	_box("商道路面", Vector3(-1.0, 0.02, -1.2), Vector3(5.0, 0.08, 17), Color("#756951"))
+	terrain_pbr_material = _pbr_material(
+		"%smud_forest/mud_forest" % POLY_HAVEN,
+		Color("#73806f"),
+		Vector3(8.0, 5.2, 1.0)
+	)
+	road_pbr_material = _pbr_material(
+		"%sgrassy_cobblestone/grassy_cobblestone" % POLY_HAVEN,
+		Color("#8e856d"),
+		Vector3(3.2, 9.5, 1.0)
+	)
+	var terrain := _box(
+		"渡口PBR地面",
+		Vector3(0, -0.35, -1),
+		Vector3(26, 0.7, 17),
+		Color("#536253")
+	)
+	terrain.material_override = terrain_pbr_material
+	var road := _box(
+		"商道PBR路面",
+		Vector3(-1.0, 0.02, -1.2),
+		Vector3(5.0, 0.08, 17),
+		Color("#756951")
+	)
+	road.material_override = road_pbr_material
 	_create_river_surface()
 	_create_road_stones()
 	_create_riverbanks()
@@ -377,11 +402,12 @@ func _create_road_stones() -> void:
 				0.075,
 				0.58 + float((row * 2 + column) % 3) * 0.06
 			)
-			stone_mesh.material = _material(
-				stone_colors[(row + column) % stone_colors.size()],
-				0.0,
-				0.96
-			)
+			var stone_material := road_pbr_material.duplicate() as StandardMaterial3D
+			stone_material.albedo_color *= stone_colors[
+				(row + column) % stone_colors.size()
+			].lightened(0.16)
+			stone_material.uv1_scale = Vector3(1.3, 1.0, 1.0)
+			stone_mesh.material = stone_material
 			stone.mesh = stone_mesh
 			world_root.add_child(stone)
 
@@ -1267,4 +1293,36 @@ func _material(color: Color, metallic: float, roughness: float) -> StandardMater
 	material.albedo_color = color
 	material.metallic = metallic
 	material.roughness = roughness
+	return material
+
+
+func _pbr_material(
+	source_prefix: String,
+	tint: Color,
+	uv_scale: Vector3
+) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	var diffuse := load("%s_diff_1k.jpg" % source_prefix) as Texture2D
+	var normal := load("%s_nor_gl_1k.jpg" % source_prefix) as Texture2D
+	var arm := load("%s_arm_1k.jpg" % source_prefix) as Texture2D
+	if diffuse == null or normal == null or arm == null:
+		material.albedo_color = tint
+		material.roughness = 0.92
+		return material
+	material.albedo_color = tint
+	material.albedo_texture = diffuse
+	material.normal_enabled = true
+	material.normal_texture = normal
+	material.normal_scale = 0.72
+	material.ao_enabled = true
+	material.ao_texture = arm
+	material.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	material.roughness = 1.0
+	material.roughness_texture = arm
+	material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	material.metallic = 0.0
+	material.metallic_texture = arm
+	material.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+	material.uv1_scale = uv_scale
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return material

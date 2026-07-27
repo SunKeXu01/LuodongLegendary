@@ -108,8 +108,12 @@ func _ready() -> void:
 		"loot": [{"item_id": "cold_iron", "amount": 1, "position": [2.0, 0.0, 3.0]}],
 		"world_time": 0.72,
 	}
+	GameState.configure_profile("沈舟", "canglang")
 	_expect(GameState.save_game(snapshot, test_save_path), "游戏状态应能写入存档")
 	GameState.reset()
+	GameState.profile_created = false
+	GameState.profile_name = "临时名号"
+	GameState.profile_style = "qingming"
 	var restored := GameState.load_game(test_save_path)
 	_expect(GameState.quest_state == "completed", "读取存档后任务状态应恢复")
 	_expect(GameState.quest_route == "investigate", "读取存档后路线选择应恢复")
@@ -122,12 +126,18 @@ func _ready() -> void:
 	_expect(GameState.silver == 150, "读取存档后碎银应恢复")
 	_expect(GameState.get_enhancement("hanling_blade") == 1, "读取存档后兵刃淬炼等级应恢复")
 	_expect(GameState.get_attack() == 34, "读取存档后淬炼属性应恢复")
+	_expect(GameState.profile_created, "读取存档后应恢复已经建立的江湖身份")
+	_expect(GameState.profile_name == "沈舟", "读取存档后应恢复玩家名号")
+	_expect(GameState.profile_style == "canglang", "读取存档后应恢复人物外观来历")
 	_expect(restored.get("loot", []).size() == 1, "读取存档后地面掉落应恢复")
 	_expect(restored.get("current_zone", "") == "silent_temple", "读取后所在区域应恢复")
 	_expect(is_equal_approx(float(restored.get("world_time", 0.0)), 0.72), "读取存档后时辰应恢复")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_save_path))
 
 	GameState.reset()
+	GameState.profile_created = false
+	GameState.profile_name = "青冥门少侠"
+	GameState.profile_style = "qingming"
 	GameState.choose_quest_route("protect")
 	GameState.mark_quest_ready()
 	GameState.finish_first_quest()
@@ -136,6 +146,34 @@ func _ready() -> void:
 
 	var main_scene = load("res://scenes/main.tscn").instantiate()
 	add_child(main_scene)
+	_expect(main_scene.get("character_creation_active"), "新档首次启动应显示人物创建流程")
+	var creation_layer := main_scene.get("character_creation_layer") as CanvasLayer
+	_expect(
+		is_instance_valid(creation_layer)
+		and is_instance_valid(
+			creation_layer.get_node_or_null("水墨夜幕")
+		)
+		and is_instance_valid(
+			creation_layer.get_node_or_null(
+				"人物预览面板/创建角色预览/创建角色预览视口"
+			)
+		),
+		"人物创建界面应包含全屏水墨幕和独立 3D 预览视口"
+	)
+	main_scene.call("_select_creation_style", "jinyi")
+	var preview_actor := main_scene.get("creation_preview_actor") as WuxiaActor3D
+	_expect(
+		is_instance_valid(preview_actor)
+		and preview_actor.costume_style == "jinyi",
+		"人物创建界面应能即时切换原创来历配色"
+	)
+	GameState.configure_profile("沈孤鸿", "jinyi")
+	main_scene.call("_refresh_hud")
+	_expect(
+		main_scene.get("player_name_label").text == "沈孤鸿"
+		and main_scene.get("level_label").text.contains("锦衣行"),
+		"创建的名号与原创来历应同步显示在网游式 HUD"
+	)
 	_expect(is_instance_valid(main_scene.get("smith_npc")), "云津渡应生成可交互铁匠鲁三火")
 	var quest_actor = main_scene.get("quest_npc")
 	var smith_actor = main_scene.get("smith_npc")
@@ -143,6 +181,36 @@ func _ready() -> void:
 	_expect(smith_actor.status_marker.text == "锻", "铁匠头顶应显示常驻功能标识")
 	var cloud_world = main_scene.get("world")
 	_expect(is_instance_valid(cloud_world.rest_marker), "云津渡应包含可点击的茶棚休整设施")
+	var pbr_terrain := cloud_world.world_root.get_node_or_null(
+		"渡口PBR地面"
+	) as MeshInstance3D
+	var pbr_road := cloud_world.world_root.get_node_or_null(
+		"商道PBR路面"
+	) as MeshInstance3D
+	var terrain_material := (
+		pbr_terrain.material_override as StandardMaterial3D
+		if is_instance_valid(pbr_terrain)
+		else null
+	)
+	var road_material := (
+		pbr_road.material_override as StandardMaterial3D
+		if is_instance_valid(pbr_road)
+		else null
+	)
+	_expect(
+		is_instance_valid(terrain_material)
+		and is_instance_valid(terrain_material.albedo_texture)
+		and is_instance_valid(terrain_material.normal_texture)
+		and is_instance_valid(terrain_material.roughness_texture),
+		"渡口地面应使用 CC0 漫反射、法线和 ARM PBR 贴图"
+	)
+	_expect(
+		is_instance_valid(road_material)
+		and is_instance_valid(road_material.albedo_texture)
+		and is_instance_valid(road_material.normal_texture)
+		and is_instance_valid(road_material.roughness_texture),
+		"商路应使用独立的 CC0 草隙石路 PBR 材质"
+	)
 	_expect(
 		is_instance_valid(cloud_world.world_root.get_node_or_null("动态云津河面"))
 		and (

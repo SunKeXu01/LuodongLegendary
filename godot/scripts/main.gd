@@ -12,6 +12,23 @@ const SKILL_DATA := {
 	"踏燕行": {"cost": 20, "cooldown": 10.0, "duration": 5.0},
 	"调息": {"cost": 26, "cooldown": 12.0, "heal": 32},
 }
+const CREATION_STYLES := {
+	"qingming": {
+		"name": "青冥门",
+		"subtitle": "守正用剑 · 身法均衡",
+		"description": "青衣负剑，重视基本功与江湖公义。适合第一次踏入云津渡的少侠。",
+	},
+	"canglang": {
+		"name": "沧浪门",
+		"subtitle": "临水听涛 · 内力绵长",
+		"description": "蓝衫行舟，以吐纳和借势见长。当前版本使用同一套平衡数值，先体现身份与外观。",
+	},
+	"jinyi": {
+		"name": "锦衣行",
+		"subtitle": "缉事查案 · 出手凌厉",
+		"description": "绛衣佩刀，擅长追查线索。当前版本不会加入真实朝廷组织名称或历史人物。",
+	},
+}
 
 var player: WuxiaActor3D
 var enemies: Array[WuxiaActor3D] = []
@@ -29,6 +46,7 @@ var enemy_attack_time := 0.0
 var health_bar: ProgressBar
 var health_label: Label
 var level_label: Label
+var player_name_label: Label
 var inner_power_bar: ProgressBar
 var experience_bar: ProgressBar
 var silver_label: Label
@@ -74,6 +92,14 @@ var boss_telegraph_radius := 0.0
 var boss_telegraph_origin := Vector3.ZERO
 var boss_telegraph: MeshInstance3D
 var hovered_actor: WuxiaActor3D
+var character_creation_layer: CanvasLayer
+var character_creation_active := false
+var creation_preview_viewport: SubViewport
+var creation_preview_actor: WuxiaActor3D
+var creation_name_edit: LineEdit
+var creation_style_label: Label
+var creation_style_description: Label
+var creation_style := "qingming"
 
 
 func _ready() -> void:
@@ -96,6 +122,8 @@ func _ready() -> void:
 	GameState.state_changed.connect(_refresh_hud)
 	GameState.inventory_changed.connect(_refresh_active_window)
 	_refresh_hud()
+	if not GameState.profile_created:
+		_create_character_creation()
 
 
 func _create_background() -> void:
@@ -116,8 +144,9 @@ func _create_background() -> void:
 
 func _create_player() -> void:
 	player = Actor.new()
-	player.display_name = "青冥门少侠"
+	player.display_name = GameState.profile_name
 	player.visual_variant = "hero"
+	player.costume_style = GameState.profile_style
 	player.max_health = GameState.player_max_health
 	player.position = (
 		Vector3(0.0, 0.0, 6.0)
@@ -309,6 +338,8 @@ func _save_current_game(notify := false) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if character_creation_active:
+		return
 	if not (event is InputEventMouseButton):
 		return
 	var mouse_event := event as InputEventMouseButton
@@ -417,6 +448,8 @@ func _clear_target() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if character_creation_active:
+		return
 	retarget_time = maxf(0.0, retarget_time - delta)
 	enemy_attack_time = maxf(0.0, enemy_attack_time - delta)
 	for skill_name in skill_cooldowns:
@@ -901,7 +934,14 @@ func _create_hud() -> void:
 	var portrait := _panel(Vector2(12, 16), Vector2(74, 74), Color("#17352d"))
 	status.add_child(portrait)
 	_create_live_player_portrait(portrait)
-	_add_label(status, "青冥门少侠", Vector2(98, 11), Vector2(150, 25), 18, Color("#f0e6c8"))
+	player_name_label = _add_label(
+		status,
+		GameState.profile_name,
+		Vector2(98, 11),
+		Vector2(150, 25),
+		18,
+		Color("#f0e6c8")
+	)
 	level_label = _add_label(
 		status, "", Vector2(245, 13), Vector2(82, 22), 12, Color("#9fc7ad"), true
 	)
@@ -1130,6 +1170,7 @@ func _create_live_player_portrait(parent: Control) -> void:
 	portrait_actor.name = "头像少侠"
 	portrait_actor.display_name = ""
 	portrait_actor.visual_variant = "hero"
+	portrait_actor.costume_style = GameState.profile_style
 	portrait_actor.hostile = false
 	portrait_actor.position = Vector3(0, 0, 0)
 	portrait_world.add_child(portrait_actor)
@@ -1139,14 +1180,299 @@ func _create_live_player_portrait(parent: Control) -> void:
 		portrait_actor.selection_disc.visible = false
 
 
+func _create_character_creation() -> void:
+	character_creation_active = true
+	character_creation_layer = CanvasLayer.new()
+	character_creation_layer.name = "江湖人物创建"
+	character_creation_layer.layer = 120
+	add_child(character_creation_layer)
+
+	var veil := ColorRect.new()
+	veil.name = "水墨夜幕"
+	veil.position = Vector2.ZERO
+	veil.size = Vector2(1280, 720)
+	veil.color = Color(0.012, 0.022, 0.021, 0.96)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	character_creation_layer.add_child(veil)
+
+	var title_panel := _panel(
+		Vector2(42, 32),
+		Vector2(1196, 76),
+		Color(0.025, 0.042, 0.037, 0.96)
+	)
+	title_panel.name = "创建标题栏"
+	character_creation_layer.add_child(title_panel)
+	_add_label(
+		title_panel,
+		"泺 栋 传 奇",
+		Vector2(25, 9),
+		Vector2(350, 50),
+		35,
+		Color("#e3c57b")
+	)
+	_add_label(
+		title_panel,
+		"明中叶 · 云津渡  /  建立你的江湖身份",
+		Vector2(392, 22),
+		Vector2(520, 30),
+		17,
+		Color("#aab9aa")
+	)
+	_add_label(
+		title_panel,
+		"离线单机 · 纯鼠标操作",
+		Vector2(944, 22),
+		Vector2(220, 30),
+		14,
+		Color("#c9ad68"),
+		true
+	)
+
+	var preview_panel := _panel(
+		Vector2(42, 126),
+		Vector2(604, 544),
+		Color(0.023, 0.04, 0.036, 0.96)
+	)
+	preview_panel.name = "人物预览面板"
+	character_creation_layer.add_child(preview_panel)
+	_add_label(
+		preview_panel,
+		"人物预览",
+		Vector2(20, 14),
+		Vector2(120, 28),
+		16,
+		Color("#c9ad68")
+	)
+	_create_character_preview(preview_panel)
+
+	var options_panel := _panel(
+		Vector2(668, 126),
+		Vector2(570, 544),
+		Color(0.023, 0.04, 0.036, 0.97)
+	)
+	options_panel.name = "人物选项面板"
+	character_creation_layer.add_child(options_panel)
+	_add_label(
+		options_panel,
+		"江湖名号",
+		Vector2(28, 26),
+		Vector2(130, 28),
+		17,
+		Color("#e4d5ad")
+	)
+	creation_name_edit = LineEdit.new()
+	creation_name_edit.name = "名号输入"
+	creation_name_edit.position = Vector2(28, 62)
+	creation_name_edit.size = Vector2(514, 46)
+	creation_name_edit.placeholder_text = "输入 1—8 个汉字"
+	creation_name_edit.max_length = 8
+	creation_name_edit.text = "云津少侠"
+	creation_name_edit.add_theme_font_size_override("font_size", 18)
+	creation_name_edit.add_theme_color_override("font_color", Color("#f0e5c6"))
+	creation_name_edit.add_theme_color_override("caret_color", Color("#dfbd65"))
+	creation_name_edit.add_theme_stylebox_override(
+		"normal",
+		_style(Color("#151d1a"), 4, Color("#7c6842"))
+	)
+	options_panel.add_child(creation_name_edit)
+
+	_add_label(
+		options_panel,
+		"来历选择",
+		Vector2(28, 130),
+		Vector2(130, 28),
+		17,
+		Color("#e4d5ad")
+	)
+	var style_ids := ["qingming", "canglang", "jinyi"]
+	for index in style_ids.size():
+		var style_id: String = style_ids[index]
+		var style_data: Dictionary = CREATION_STYLES[style_id]
+		var style_button := _button(
+			options_panel,
+			str(style_data["name"]),
+			Vector2(28 + index * 174, 168),
+			Vector2(160, 52)
+		)
+		style_button.name = "来历_%s" % style_id
+		style_button.pressed.connect(_select_creation_style.bind(style_id))
+
+	creation_style_label = _add_label(
+		options_panel,
+		"",
+		Vector2(28, 248),
+		Vector2(514, 30),
+		20,
+		Color("#e3c36d")
+	)
+	creation_style_description = _add_label(
+		options_panel,
+		"",
+		Vector2(28, 286),
+		Vector2(514, 76),
+		14,
+		Color("#c8c6b5")
+	)
+	creation_style_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+
+	var start_button := _button(
+		options_panel,
+		"踏 入 江 湖",
+		Vector2(28, 390),
+		Vector2(514, 58)
+	)
+	start_button.name = "踏入江湖"
+	start_button.add_theme_font_size_override("font_size", 22)
+	start_button.pressed.connect(_confirm_character_creation)
+
+	if GameState.has_save():
+		var continue_button := _button(
+			options_panel,
+			"读取旧档",
+			Vector2(28, 462),
+			Vector2(160, 42)
+		)
+		continue_button.name = "读取旧档"
+		continue_button.pressed.connect(_continue_saved_character)
+		_add_label(
+			options_panel,
+			"检测到本机离线存档，可直接继续上次历程。",
+			Vector2(204, 469),
+			Vector2(338, 27),
+			13,
+			Color("#91aa99")
+		)
+	_select_creation_style("qingming")
+
+
+func _create_character_preview(parent: Control) -> void:
+	var container := SubViewportContainer.new()
+	container.name = "创建角色预览"
+	container.position = Vector2(20, 52)
+	container.size = Vector2(564, 468)
+	container.stretch = true
+	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(container)
+
+	creation_preview_viewport = SubViewport.new()
+	creation_preview_viewport.name = "创建角色预览视口"
+	creation_preview_viewport.size = Vector2i(720, 600)
+	creation_preview_viewport.own_world_3d = true
+	creation_preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	creation_preview_viewport.msaa_3d = Viewport.MSAA_4X
+	container.add_child(creation_preview_viewport)
+
+	var preview_world := Node3D.new()
+	preview_world.name = "预览世界"
+	creation_preview_viewport.add_child(preview_world)
+
+	var preview_environment := WorldEnvironment.new()
+	var environment_resource := Environment.new()
+	environment_resource.background_mode = Environment.BG_COLOR
+	environment_resource.background_color = Color("#10211d")
+	environment_resource.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment_resource.ambient_light_color = Color("#b8b297")
+	environment_resource.ambient_light_energy = 0.42
+	environment_resource.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	preview_environment.environment = environment_resource
+	preview_world.add_child(preview_environment)
+
+	var key_light := DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-46, -30, 0)
+	key_light.light_color = Color("#ffe2a8")
+	key_light.light_energy = 1.4
+	preview_world.add_child(key_light)
+
+	var rim_light := OmniLight3D.new()
+	rim_light.position = Vector3(-2.0, 2.0, -0.8)
+	rim_light.omni_range = 6.0
+	rim_light.light_color = Color("#4f9b8f")
+	rim_light.light_energy = 2.0
+	preview_world.add_child(rim_light)
+
+	var camera := Camera3D.new()
+	camera.name = "人物预览镜头"
+	camera.position = Vector3(0, 1.25, 4.5)
+	camera.fov = 30.0
+	preview_world.add_child(camera)
+	camera.look_at(Vector3(0, 1.0, 0), Vector3.UP)
+
+	var pedestal := MeshInstance3D.new()
+	pedestal.name = "青石台"
+	pedestal.position = Vector3(0, 0.05, 0)
+	var pedestal_mesh := CylinderMesh.new()
+	pedestal_mesh.top_radius = 0.78
+	pedestal_mesh.bottom_radius = 0.9
+	pedestal_mesh.height = 0.12
+	pedestal_mesh.radial_segments = 48
+	pedestal_mesh.material = _material_3d(Color("#4b544b"), 0.84)
+	pedestal.mesh = pedestal_mesh
+	preview_world.add_child(pedestal)
+
+
+func _select_creation_style(style_id: String) -> void:
+	if not CREATION_STYLES.has(style_id):
+		return
+	creation_style = style_id
+	var style_data: Dictionary = CREATION_STYLES[style_id]
+	creation_style_label.text = "%s · %s" % [
+		style_data["name"],
+		style_data["subtitle"],
+	]
+	creation_style_description.text = str(style_data["description"])
+	if is_instance_valid(creation_preview_actor):
+		creation_preview_actor.queue_free()
+	creation_preview_actor = Actor.new()
+	creation_preview_actor.name = "预览少侠"
+	creation_preview_actor.display_name = ""
+	creation_preview_actor.visual_variant = "hero"
+	creation_preview_actor.costume_style = style_id
+	creation_preview_actor.position = Vector3.ZERO
+	creation_preview_actor.rotation_degrees.y = 180.0
+	creation_preview_viewport.get_node("预览世界").add_child(creation_preview_actor)
+	if is_instance_valid(creation_preview_actor.nameplate):
+		creation_preview_actor.nameplate.visible = false
+	if is_instance_valid(creation_preview_actor.selection_disc):
+		creation_preview_actor.selection_disc.visible = false
+
+
+func _confirm_character_creation() -> void:
+	GameState.reset()
+	GameState.configure_profile(creation_name_edit.text, creation_style)
+	GameState.save_game(_world_snapshot())
+	get_tree().reload_current_scene()
+
+
+func _continue_saved_character() -> void:
+	GameState.request_load()
+	get_tree().reload_current_scene()
+
+
+func _material_3d(color: Color, roughness: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	return material
+
+
+func _profile_origin_name() -> String:
+	var style_data: Dictionary = CREATION_STYLES.get(
+		GameState.profile_style,
+		CREATION_STYLES["qingming"]
+	)
+	return str(style_data["name"])
+
+
 func _refresh_hud() -> void:
+	if is_instance_valid(player_name_label):
+		player_name_label.text = GameState.profile_name
 	health_bar.max_value = GameState.player_max_health
 	health_bar.value = GameState.player_health
 	health_label.text = "%d / %d" % [GameState.player_health, GameState.player_max_health]
 	inner_power_bar.max_value = GameState.player_max_inner_power
 	inner_power_bar.value = GameState.player_inner_power
 	experience_bar.value = GameState.player_experience
-	level_label.text = "%d境 · 青冥门" % GameState.player_level
+	level_label.text = "%d境 · %s" % [GameState.player_level, _profile_origin_name()]
 	silver_label.text = "◆ 碎银  %d" % GameState.silver
 	location_label.text = world.get_location_label()
 	chapter_label.text = (
@@ -1555,7 +1881,22 @@ func _open_inventory_window() -> void:
 func _open_character_window() -> void:
 	_close_active_window()
 	active_window = _window("侠客详情", "角色")
-	_add_label(active_window, "青冥门少侠", Vector2(24, 52), Vector2(230, 30), 22, Color("#eddbad"))
+	_add_label(
+		active_window,
+		GameState.profile_name,
+		Vector2(24, 48),
+		Vector2(230, 30),
+		22,
+		Color("#eddbad")
+	)
+	_add_label(
+		active_window,
+		"%s弟子" % _profile_origin_name(),
+		Vector2(24, 76),
+		Vector2(200, 24),
+		14,
+		Color("#a99b79")
+	)
 	_add_label(
 		active_window,
 		"境界：第%d境\n经验：%d / 100\n气血：%d / %d\n内力：%d / %d\n外功攻击：%d\n外功防御：%d\n云津渡声望：%d" % [
@@ -1565,7 +1906,7 @@ func _open_character_window() -> void:
 			GameState.get_attack(), GameState.get_defense(),
 			GameState.cloud_ford_reputation
 		],
-		Vector2(24, 96), Vector2(200, 230), 15, Color("#d8d0ba")
+		Vector2(24, 108), Vector2(200, 218), 15, Color("#d8d0ba")
 	)
 	_add_label(active_window, "当前装备", Vector2(247, 54), Vector2(160, 26), 17, Color("#cda95e"))
 	var slot_names := {"weapon": "兵刃", "armor": "护具", "accessory": "饰物"}

@@ -13,6 +13,7 @@ const CATS_SOULSLIKE := "res://assets/vendor/cats_soulslike/"
 @export var attack_power := 12
 @export var actor_level := 1
 @export_enum("hero", "npc", "enemy", "boss") var visual_variant := "npc"
+@export_enum("qingming", "canglang", "jinyi") var costume_style := "qingming"
 
 var health: int
 var selected := false:
@@ -573,6 +574,11 @@ func _add_bone_box(
 func _cats_cloth_color() -> Color:
 	match visual_variant:
 		"hero":
+			match costume_style:
+				"canglang":
+					return Color("#274b63")
+				"jinyi":
+					return Color("#642f32")
 			return Color("#173f38")
 		"npc":
 			return Color("#71483d")

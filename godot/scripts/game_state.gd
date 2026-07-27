@@ -62,6 +62,9 @@ var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
 var master_volume := 0.72
 var fullscreen := false
 var load_requested := false
+var profile_created := false
+var profile_name := "青冥门少侠"
+var profile_style := "qingming"
 
 
 func _ready() -> void:
@@ -101,6 +104,18 @@ func reset() -> void:
 
 func set_message(value: String) -> void:
 	message = value
+	state_changed.emit()
+
+
+func configure_profile(character_name: String, style_id: String) -> void:
+	var trimmed_name := character_name.strip_edges()
+	profile_name = trimmed_name.left(8) if not trimmed_name.is_empty() else "无名少侠"
+	profile_style = (
+		style_id
+		if style_id in ["qingming", "canglang", "jinyi"]
+		else "qingming"
+	)
+	profile_created = true
 	state_changed.emit()
 
 
@@ -470,6 +485,11 @@ func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
 			"silver": silver,
 			"selected_skill": selected_skill,
 		},
+		"profile": {
+			"created": profile_created,
+			"name": profile_name,
+			"style": profile_style,
+		},
 		"quest": {
 			"text": quest_text,
 			"state": quest_state,
@@ -516,6 +536,10 @@ func load_game(path := SAVE_PATH) -> Dictionary:
 	player_experience = int(player_data.get("experience", 36))
 	silver = int(player_data.get("silver", 0))
 	selected_skill = str(player_data.get("selected_skill", "青冥剑式"))
+	var profile_data: Dictionary = parsed.get("profile", {})
+	profile_created = bool(profile_data.get("created", false))
+	profile_name = str(profile_data.get("name", "青冥门少侠"))
+	profile_style = str(profile_data.get("style", "qingming"))
 	var quest_data: Dictionary = parsed.get("quest", {})
 	quest_text = str(quest_data.get("text", "拜访渡口巡检"))
 	quest_state = str(quest_data.get("state", "available"))

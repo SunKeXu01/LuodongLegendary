@@ -139,6 +139,20 @@ Original names, roles, combat rules, maps, UI and Ming-era story remain this
 project's work. Exact file provenance and checksums are recorded in
 `godot/assets/vendor/cats_soulslike/SOURCE.md` and `SHA256SUMS`.
 
+## Poly Haven ground materials
+
+- Provider: Poly Haven
+- License: Creative Commons Zero 1.0 Universal
+- Assets: [Mud Forest](https://polyhaven.com/a/mud_forest) and
+  [Grassy Cobblestone](https://polyhaven.com/a/grassy_cobblestone)
+- Used files: 1K JPG diffuse, OpenGL normal and ARM maps for each material
+- Actual use: tiled PBR terrain and merchant-road materials in Cloud Ford.
+
+The original texture images are unmodified. Godot applies project-specific UV
+scales and muted Ming-wuxia color tints at runtime. Exact files, authors,
+channel usage and SHA-256 checksums are recorded under
+`godot/assets/vendor/poly_haven/`.
+
 ## remarkablegames/phaser-rpg
 
 - Source: <https://github.com/remarkablegames/phaser-rpg>
