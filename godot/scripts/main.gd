@@ -3,11 +3,16 @@ extends Node2D
 const Actor = preload("res://scripts/wuxia_actor_3d.gd")
 const Minimap = preload("res://scripts/minimap_widget.gd")
 const CloudFordWorld = preload("res://scripts/cloud_ford_world_3d.gd")
+const LootPickup = preload("res://scripts/loot_pickup_3d.gd")
 
 var player: WuxiaActor3D
 var enemies: Array[WuxiaActor3D] = []
 var selected_enemy: WuxiaActor3D
 var world: CloudFordWorld3D
+var quest_npc: WuxiaActor3D
+var loot_drops: Array[LootPickup3D] = []
+var pending_loot: LootPickup3D
+var pending_npc: WuxiaActor3D
 var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
@@ -16,12 +21,16 @@ var inner_power_bar: ProgressBar
 var experience_bar: ProgressBar
 var silver_label: Label
 var quest_count: Label
+var quest_title_label: Label
+var quest_description_label: Label
 var message_label: Label
 var target_label: Label
 var target_health_bar: ProgressBar
 var skill_buttons: Array[Button] = []
 var qinggong_time := 0.0
 var heal_cooldown := 0.0
+var hud_layer: CanvasLayer
+var active_window: Panel
 
 
 func _ready() -> void:
@@ -29,8 +38,10 @@ func _ready() -> void:
 	_create_background()
 	_create_player()
 	_create_enemies()
+	_create_quest_npc()
 	_create_hud()
 	GameState.state_changed.connect(_refresh_hud)
+	GameState.inventory_changed.connect(_refresh_active_window)
 	_refresh_hud()
 
 
@@ -74,6 +85,14 @@ func _create_enemies() -> void:
 		enemies.append(enemy)
 
 
+func _create_quest_npc() -> void:
+	quest_npc = Actor.new()
+	quest_npc.display_name = "渡口巡检·沈砚"
+	quest_npc.position = Vector3(-4.5, 0.0, 1.2)
+	quest_npc.move_speed = 4.0
+	world.add_actor(quest_npc)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton):
 		return
@@ -81,6 +100,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
 	var click: Vector2 = mouse_event.position
+	for loot in loot_drops:
+		if not is_instance_valid(loot):
+			continue
+		var loot_screen := world.world_to_screen(loot.global_position + Vector3(0, 0.45, 0))
+		if loot_screen.distance_to(click) <= 34.0:
+			_command_collect_loot(loot)
+			return
+	if is_instance_valid(quest_npc):
+		var npc_screen := world.world_to_screen(quest_npc.global_position + Vector3(0, 1.0, 0))
+		if npc_screen.distance_to(click) <= 46.0:
+			_command_talk_to_npc(quest_npc)
+			return
 	for enemy in enemies:
 		if not is_instance_valid(enemy):
 			continue
@@ -93,6 +124,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _command_player(click: Vector2) -> void:
+	pending_loot = null
+	pending_npc = null
 	var destination := world.screen_to_ground(click)
 	player.command_move(destination)
 	world.show_move_marker(destination)
@@ -100,6 +133,8 @@ func _command_player(click: Vector2) -> void:
 
 
 func _select_enemy(enemy: WuxiaActor3D) -> void:
+	pending_loot = null
+	pending_npc = null
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
 		selected_enemy.combat_target = null
@@ -134,8 +169,50 @@ func _physics_process(delta: float) -> void:
 		qinggong_time = maxf(0.0, qinggong_time - delta)
 		if qinggong_time <= 0.0:
 			player.move_speed = 5.0
+	_update_pending_interactions()
 	_update_player_combat()
 	_update_enemy_combat()
+
+
+func _command_collect_loot(loot: LootPickup3D) -> void:
+	_clear_target()
+	pending_npc = null
+	pending_loot = loot
+	player.command_move(loot.global_position)
+	world.show_move_marker(loot.global_position)
+	GameState.set_message("正在前往拾取%s。" % loot.item_name)
+
+
+func _command_talk_to_npc(npc: WuxiaActor3D) -> void:
+	_clear_target()
+	pending_loot = null
+	pending_npc = npc
+	var approach := npc.global_position + npc.global_position.direction_to(player.global_position) * 1.15
+	player.command_move(approach)
+	world.show_move_marker(approach)
+	GameState.set_message("正在前往与%s交谈。" % npc.display_name)
+
+
+func _update_pending_interactions() -> void:
+	if is_instance_valid(pending_loot):
+		if player.global_position.distance_to(pending_loot.global_position) <= 0.9:
+			_collect_loot(pending_loot)
+		return
+	if is_instance_valid(pending_npc):
+		if player.global_position.distance_to(pending_npc.global_position) <= 1.55:
+			player.stop()
+			var npc := pending_npc
+			pending_npc = null
+			_open_npc_dialogue(npc)
+
+
+func _collect_loot(loot: LootPickup3D) -> void:
+	var item_name := loot.item_name
+	GameState.add_item(loot.item_id, loot.amount)
+	loot_drops.erase(loot)
+	pending_loot = null
+	loot.queue_free()
+	GameState.set_message("拾取%s ×%d，已放入背包。" % [item_name, loot.amount])
 
 
 func _update_player_combat() -> void:
@@ -161,11 +238,11 @@ func _update_player_combat() -> void:
 	world.play_skill_effect(
 		GameState.selected_skill, player.global_position, selected_enemy.global_position
 	)
-	var damage := 22
+	var damage := GameState.get_attack()
 	if GameState.selected_skill == "伏虎掌":
-		damage = 28
+		damage = roundi(float(GameState.get_attack()) * 1.25)
 	elif GameState.selected_skill == "机弩术":
-		damage = 18
+		damage = roundi(float(GameState.get_attack()) * 0.85)
 	var target := selected_enemy
 	target.take_damage(damage)
 	_show_damage(
@@ -205,13 +282,20 @@ func _update_enemy_combat() -> void:
 			enemy.stop()
 			enemy.play_attack()
 			world.play_skill_effect("敌人反击", enemy.global_position, player.global_position)
-			GameState.damage_player(8)
-			_show_damage(player.global_position + Vector3(0, 1.8, 0), 8, Color("#ff776d"))
+			var enemy_damage := maxi(1, 12 - GameState.get_defense())
+			GameState.damage_player(enemy_damage)
+			_show_damage(
+				player.global_position + Vector3(0, 1.8, 0),
+				enemy_damage,
+				Color("#ff776d")
+			)
 			if GameState.player_health == 0:
 				player.stop()
 				GameState.set_message("少侠气血耗尽。点击右上角“重新闯荡”再次挑战。")
 			else:
-				GameState.set_message("%s发动反击，少侠损失 8 点气血。" % enemy.display_name)
+				GameState.set_message("%s发动反击，少侠损失 %d 点气血。" % [
+					enemy.display_name, enemy_damage
+				])
 			return
 		if not enemy.moving or enemy.destination.distance_to(player.global_position) > 0.8:
 			var pursuit := (
@@ -223,19 +307,34 @@ func _update_enemy_combat() -> void:
 
 func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 	var name := enemy.display_name
+	var defeated_at := enemy.global_position
 	if selected_enemy == enemy:
 		selected_enemy = null
 		player.combat_target = null
 	enemies.erase(enemy)
 	enemy.play_defeat()
 	get_tree().create_timer(0.55).timeout.connect(enemy.queue_free)
+	_spawn_loot(name, defeated_at)
 	GameState.add_silver(12)
 	GameState.set_message("击败%s，获得碎银 12 两。" % name)
 	target_label.text = "目标｜尚未选中"
 	target_health_bar.value = 0
 	if enemies.is_empty():
-		GameState.quest_text = "云津渡伏兵已清剿"
-		GameState.set_message("云津渡重归安宁。新的江湖线索已解锁。")
+		GameState.mark_quest_ready()
+
+
+func _spawn_loot(enemy_name: String, at: Vector3) -> void:
+	var item_id := "healing_salve"
+	if enemy_name == "黑衣暗桩":
+		item_id = "cold_iron"
+	elif enemy_name == "寂音武僧":
+		item_id = "monk_bracer"
+	var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
+	var loot: LootPickup3D = LootPickup.new()
+	loot.configure(item_id, str(definition["name"]), 1)
+	loot.position = Vector3(at.x, 0.0, at.z)
+	world.add_actor(loot)
+	loot_drops.append(loot)
 
 
 func _show_damage(at: Vector3, amount: int, color: Color) -> void:
@@ -258,9 +357,10 @@ func _show_damage(at: Vector3, amount: int, color: Color) -> void:
 
 
 func _create_hud() -> void:
-	var hud := CanvasLayer.new()
-	hud.layer = 50
-	add_child(hud)
+	hud_layer = CanvasLayer.new()
+	hud_layer.layer = 50
+	add_child(hud_layer)
+	var hud := hud_layer
 
 	var chapter := _panel(Vector2(482, 14), Vector2(316, 40), Color(0.025, 0.035, 0.03, 0.82))
 	hud.add_child(chapter)
@@ -328,8 +428,12 @@ func _create_hud() -> void:
 	var quest := _panel(Vector2(958, 218), Vector2(302, 148), Color(0.025, 0.04, 0.035, 0.91))
 	hud.add_child(quest)
 	_add_label(quest, "任务追踪", Vector2(15, 11), Vector2(90, 21), 13, Color("#8fa99a"))
-	_add_label(quest, "◆ 云津渡伏兵", Vector2(15, 37), Vector2(190, 25), 18, Color("#ead179"))
-	_add_label(quest, "寒岭武氏暗桩潜伏渡口，清剿伏兵。", Vector2(15, 66), Vector2(270, 22), 13, Color("#d5cbb2"))
+	quest_title_label = _add_label(
+		quest, "", Vector2(15, 37), Vector2(238, 25), 18, Color("#ead179")
+	)
+	quest_description_label = _add_label(
+		quest, "", Vector2(15, 66), Vector2(270, 22), 13, Color("#d5cbb2")
+	)
 	quest_count = _add_label(quest, "", Vector2(15, 96), Vector2(178, 24), 14, Color("#d8b45c"))
 	var track := _button(quest, "追踪", Vector2(211, 94), Vector2(72, 36))
 	track.tooltip_text = "选择最近的任务目标并自动寻路"
@@ -384,7 +488,23 @@ func _refresh_hud() -> void:
 	inner_power_bar.value = GameState.player_inner_power
 	experience_bar.value = GameState.player_experience
 	silver_label.text = "◆ 碎银  %d" % GameState.silver
-	quest_count.text = "%d / 3 名敌人已清剿" % (3 - enemies.size())
+	match GameState.quest_state:
+		"available":
+			quest_title_label.text = "◆ 拜访渡口巡检"
+			quest_description_label.text = "沈砚正在渡口商道旁等待少侠。"
+			quest_count.text = "点击追踪前往"
+		"accepted":
+			quest_title_label.text = "◆ 云津渡伏兵"
+			quest_description_label.text = "清剿寒岭武氏潜伏在渡口的暗桩。"
+			quest_count.text = "%d / 3 名敌人已清剿" % (3 - enemies.size())
+		"ready":
+			quest_title_label.text = "◆ 向沈砚复命"
+			quest_description_label.text = "伏兵已经清剿，返回巡检处领取酬劳。"
+			quest_count.text = "任务可以交付"
+		"completed":
+			quest_title_label.text = "◇ 云津渡风波已平"
+			quest_description_label.text = "渡口暂时恢复了往日秩序。"
+			quest_count.text = "任务已完成"
 	message_label.text = GameState.message
 	for button in skill_buttons:
 		var skill_name := str(button.get_meta("skill_name"))
@@ -414,8 +534,15 @@ func _activate_skill(skill_name: String) -> void:
 
 
 func _track_quest() -> void:
+	if GameState.quest_state in ["available", "ready"]:
+		_command_talk_to_npc(quest_npc)
+		return
+	if GameState.quest_state == "completed":
+		GameState.set_message("本章主线已经完成，新的江湖线索将在后续章节开放。")
+		return
 	if enemies.is_empty():
-		GameState.set_message("当前任务目标已全部完成。")
+		GameState.mark_quest_ready()
+		_command_talk_to_npc(quest_npc)
 		return
 	var nearest := enemies[0]
 	var nearest_distance := player.global_position.distance_to(nearest.global_position)
@@ -429,7 +556,200 @@ func _track_quest() -> void:
 
 
 func _open_system_panel(panel_name: String) -> void:
-	GameState.set_message("%s系统入口已就位，将在后续版本开放完整内容。" % panel_name)
+	if panel_name == "背包":
+		_open_inventory_window()
+	elif panel_name == "角色":
+		_open_character_window()
+	elif panel_name == "武学":
+		_open_martial_window()
+	elif panel_name == "任务":
+		_open_quest_window()
+	else:
+		GameState.set_message("社交系统将在联网阶段开放。")
+
+
+func _open_inventory_window() -> void:
+	_close_active_window()
+	active_window = _window("随身行囊", "背包")
+	_add_label(
+		active_window, "点击药品使用，点击装备穿戴。材料会保存在行囊中。",
+		Vector2(22, 49), Vector2(420, 24), 13, Color("#aaa991")
+	)
+	if GameState.inventory.is_empty():
+		_add_label(
+			active_window, "行囊空空如也。", Vector2(30, 105), Vector2(380, 30),
+			16, Color("#bcb49d"), true
+		)
+		return
+	for index in GameState.inventory.size():
+		var entry: Dictionary = GameState.inventory[index]
+		var item_id := str(entry["id"])
+		var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
+		var equipped := item_id in GameState.equipment.values()
+		var label := "%s%s  ×%d" % [
+			"◆ " if equipped else "",
+			definition["name"],
+			int(entry["count"])
+		]
+		var item_button := _button(
+			active_window,
+			label,
+			Vector2(22 + (index % 2) * 211, 82 + (index / 2) * 58),
+			Vector2(200, 48)
+		)
+		item_button.tooltip_text = str(definition["description"])
+		item_button.pressed.connect(_handle_inventory_item.bind(item_id))
+
+
+func _open_character_window() -> void:
+	_close_active_window()
+	active_window = _window("侠客详情", "角色")
+	_add_label(active_window, "青冥门少侠", Vector2(24, 52), Vector2(230, 30), 22, Color("#eddbad"))
+	_add_label(
+		active_window,
+		"境界：八品\n气血：%d / %d\n内力：%d / %d\n外功攻击：%d\n外功防御：%d" % [
+			GameState.player_health, GameState.player_max_health,
+			GameState.player_inner_power, GameState.player_max_inner_power,
+			GameState.get_attack(), GameState.get_defense()
+		],
+		Vector2(24, 96), Vector2(190, 160), 16, Color("#d8d0ba")
+	)
+	_add_label(active_window, "当前装备", Vector2(247, 54), Vector2(160, 26), 17, Color("#cda95e"))
+	var slot_names := {"weapon": "兵刃", "armor": "护具", "accessory": "饰物"}
+	var row := 0
+	for slot in ["weapon", "armor", "accessory"]:
+		var item_id := str(GameState.equipment[slot])
+		var item_name := "未装备"
+		if not item_id.is_empty():
+			item_name = str(GameState.ITEM_DEFINITIONS[item_id]["name"])
+		_add_label(
+			active_window, "%s｜%s" % [slot_names[slot], item_name],
+			Vector2(247, 94 + row * 48), Vector2(190, 34), 15, Color("#ded5bd")
+		)
+		row += 1
+
+
+func _open_martial_window() -> void:
+	_close_active_window()
+	active_window = _window("武学谱录", "武学")
+	var descriptions := [
+		["青冥剑式", "均衡剑法，造成 100% 外功伤害。"],
+		["伏虎掌", "刚猛掌法，造成 125% 外功伤害。"],
+		["机弩术", "远射机关，造成 85% 外功伤害。"],
+		["踏燕行", "五息之内大幅提升移动速度。"],
+		["调息", "恢复气血，使用后需要八息调养。"],
+	]
+	for index in descriptions.size():
+		_add_label(
+			active_window,
+			"%s\n%s" % [descriptions[index][0], descriptions[index][1]],
+			Vector2(24, 55 + index * 65), Vector2(410, 56),
+			15, Color("#e1d6bb")
+		)
+
+
+func _open_quest_window() -> void:
+	_close_active_window()
+	active_window = _window("江湖委托", "任务")
+	_add_label(
+		active_window, GameState.quest_text,
+		Vector2(24, 56), Vector2(410, 32), 21, Color("#e5c972")
+	)
+	var details := quest_description_label.text
+	_add_label(
+		active_window, details, Vector2(24, 105), Vector2(410, 80),
+		15, Color("#d4ccb6")
+	)
+	var track := _button(active_window, "追踪任务", Vector2(24, 205), Vector2(130, 42))
+	track.pressed.connect(_track_quest)
+
+
+func _handle_inventory_item(item_id: String) -> void:
+	var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
+	var item_type := str(definition["type"])
+	if item_type == "consumable":
+		GameState.use_item(item_id)
+	elif item_type in ["weapon", "armor", "accessory"]:
+		GameState.equip_item(item_id)
+	else:
+		GameState.set_message("%s是锻造材料，暂时无法直接使用。" % definition["name"])
+
+
+func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
+	_close_active_window()
+	active_window = _window("渡口巡检·沈砚", "对话", Vector2(365, 375), Vector2(550, 245))
+	var dialogue := ""
+	var action_text := ""
+	var action: Callable
+	match GameState.quest_state:
+		"available":
+			dialogue = "少侠来得正好。寒岭武氏的暗桩混入云津渡，商旅已接连失踪。可愿助我清剿三名伏兵？"
+			action_text = "接受委托"
+			action = _accept_quest
+		"accepted":
+			dialogue = "暗桩仍潜伏在渡口各处。此事不宜惊动乡勇，还请少侠谨慎行事。"
+			action_text = "我这便去"
+			action = _close_active_window
+		"ready":
+			dialogue = "方才有人来报，三名暗桩都已伏诛。少侠此举救下了往来的百姓，这是约定的酬劳。"
+			action_text = "交付任务"
+			action = _turn_in_quest
+		"completed":
+			dialogue = "渡口虽已平静，寒岭武氏绝不会善罢甘休。日后若有线索，我会遣人通知少侠。"
+			action_text = "告辞"
+			action = _close_active_window
+	_add_label(
+		active_window, dialogue, Vector2(24, 56), Vector2(502, 92),
+		16, Color("#e5ddc9")
+	).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var action_button := _button(active_window, action_text, Vector2(292, 170), Vector2(110, 42))
+	action_button.pressed.connect(action)
+	var leave := _button(active_window, "离开", Vector2(416, 170), Vector2(110, 42))
+	leave.pressed.connect(_close_active_window)
+
+
+func _accept_quest() -> void:
+	GameState.accept_quest()
+	if enemies.is_empty():
+		GameState.mark_quest_ready()
+	_close_active_window()
+
+
+func _turn_in_quest() -> void:
+	if GameState.quest_state != "ready":
+		return
+	_close_active_window()
+	GameState.finish_quest()
+
+
+func _window(
+	title: String,
+	window_type: String,
+	at := Vector2(730, 145),
+	window_size := Vector2(470, 430)
+) -> Panel:
+	var window := _panel(at, window_size, Color(0.025, 0.035, 0.03, 0.98))
+	window.set_meta("window_type", window_type)
+	hud_layer.add_child(window)
+	_add_label(window, title, Vector2(20, 13), Vector2(window_size.x - 75, 30), 22, Color("#e7cf91"))
+	var close := _button(window, "×", Vector2(window_size.x - 48, 10), Vector2(36, 34))
+	close.pressed.connect(_close_active_window)
+	return window
+
+
+func _close_active_window() -> void:
+	if is_instance_valid(active_window):
+		active_window.queue_free()
+	active_window = null
+
+
+func _refresh_active_window() -> void:
+	if not is_instance_valid(active_window):
+		return
+	var window_type := str(active_window.get_meta("window_type", ""))
+	if window_type in ["背包", "角色"]:
+		_close_active_window()
+		call_deferred("_open_system_panel", window_type)
 
 
 func _restart_game() -> void:
