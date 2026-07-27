@@ -7,6 +7,11 @@ func _ready() -> void:
 	GameState.reset()
 	_expect(GameState.get_item_count("healing_salve") == 2, "初始金疮药数量应为 2")
 	_expect(GameState.get_attack() == 22, "装备旧制长剑后攻击应为 22")
+	_expect(GameState.spend_inner_power(20), "内力充足时应能消耗内力")
+	_expect(GameState.player_inner_power == 62, "消耗后内力应正确减少")
+	_expect(not GameState.spend_inner_power(100), "内力不足时不应允许施放")
+	GameState.restore_inner_power(20)
+	_expect(GameState.player_inner_power == 82, "内力恢复不应超过当前上限")
 
 	GameState.damage_player(60)
 	_expect(GameState.use_item("healing_salve"), "受伤时应能使用金疮药")
@@ -149,11 +154,41 @@ func _ready() -> void:
 	_expect(boss_wave.size() == 3, "营救商客后应生成院主与两名护院武僧")
 	if not boss_wave.is_empty():
 		_expect(boss_wave[0].display_name == "寂音院主·法砚", "首领波次应包含寂音院主")
+		main_scene.call("_select_enemy", boss_wave[0])
+		dungeon_player.global_position = boss_wave[0].global_position + Vector3(0, 0, 5.0)
+		var inner_power_before_crossbow := GameState.player_inner_power
+		main_scene.call("_activate_skill", "机弩术")
+		main_scene.call("_update_player_combat")
+		_expect(boss_wave[0].health == 230, "机弩术应在远程造成 105% 外功伤害")
+		_expect(
+			GameState.player_inner_power == inner_power_before_crossbow - 18,
+			"机弩术应消耗 18 点内力"
+		)
+		_expect(
+			float(main_scene.get("skill_cooldowns")["机弩术"]) > 3.5,
+			"机弩术施放后应进入独立冷却"
+		)
+		var inner_power_during_cooldown := GameState.player_inner_power
+		main_scene.call("_activate_skill", "机弩术")
+		_expect(main_scene.get("queued_skill") == "", "冷却中的技能不应再次进入施放队列")
+		_expect(
+			GameState.player_inner_power == inner_power_during_cooldown,
+			"冷却中的技能不应重复消耗内力"
+		)
 		main_scene.set("boss_skill_cooldown", 0.0)
 		main_scene.call("_update_boss_mechanics", 0.1)
 		_expect(
 			is_instance_valid(main_scene.get("boss_telegraph")),
 			"院主应生成可见的范围招式预警"
+		)
+		dungeon_player.attack_cooldown = 0.0
+		dungeon_player.global_position = boss_wave[0].global_position + Vector3(0, 0, 1.0)
+		var telegraph_before_interrupt := float(main_scene.get("boss_telegraph_time"))
+		main_scene.call("_activate_skill", "伏虎掌")
+		main_scene.call("_update_player_combat")
+		_expect(
+			float(main_scene.get("boss_telegraph_time")) > telegraph_before_interrupt,
+			"伏虎掌命中院主时应延缓范围招式蓄力"
 		)
 		var health_before_aoe := GameState.player_health
 		dungeon_player.global_position = main_scene.get("boss_telegraph_origin")

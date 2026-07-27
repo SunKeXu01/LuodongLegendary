@@ -39,13 +39,13 @@ func _create_tracer(from: Vector3, to: Vector3, color: Color) -> void:
 	var length := maxf(0.1, direction.length())
 	var tracer := MeshInstance3D.new()
 	tracer.position = (from + to) * 0.5
+	add_child(tracer)
 	tracer.look_at(to, Vector3.UP)
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.075, 0.075, length)
 	var material := _effect_material(_with_alpha(color, 0.88))
 	mesh.material = material
 	tracer.mesh = mesh
-	add_child(tracer)
 	var tween := create_tween()
 	tween.tween_property(material, "albedo_color", _with_alpha(color, 0.0), 0.24)
 	tween.tween_callback(tracer.queue_free)

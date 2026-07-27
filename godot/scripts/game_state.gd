@@ -112,6 +112,21 @@ func heal_player(amount: int) -> void:
 	state_changed.emit()
 
 
+func spend_inner_power(amount: int) -> bool:
+	if amount < 0 or player_inner_power < amount:
+		return false
+	player_inner_power -= amount
+	state_changed.emit()
+	return true
+
+
+func restore_inner_power(amount: int) -> void:
+	if amount <= 0 or player_inner_power >= player_max_inner_power:
+		return
+	player_inner_power = mini(player_max_inner_power, player_inner_power + amount)
+	state_changed.emit()
+
+
 func add_item(item_id: String, amount := 1) -> void:
 	if not ITEM_DEFINITIONS.has(item_id) or amount <= 0:
 		return

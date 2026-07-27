@@ -32,11 +32,12 @@ func stop_all() -> void:
 	for child in get_children():
 		if child is AudioStreamPlayer:
 			child.stop()
+			child.stream = null
 			child.free()
 
 
 func _play(sound_name: String) -> void:
-	if not streams.has(sound_name):
+	if DisplayServer.get_name() == "headless" or not streams.has(sound_name):
 		return
 	var player := AudioStreamPlayer.new()
 	player.stream = streams[sound_name]

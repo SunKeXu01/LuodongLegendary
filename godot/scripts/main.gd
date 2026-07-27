@@ -5,6 +5,13 @@ const Minimap = preload("res://scripts/minimap_widget.gd")
 const CloudFordWorld = preload("res://scripts/cloud_ford_world_3d.gd")
 const SilentTempleWorld = preload("res://scripts/silent_temple_world_3d.gd")
 const LootPickup = preload("res://scripts/loot_pickup_3d.gd")
+const SKILL_DATA := {
+	"青冥剑式": {"cost": 0, "cooldown": 0.78, "range": 1.4, "damage": 1.0},
+	"伏虎掌": {"cost": 14, "cooldown": 2.8, "range": 1.55, "damage": 1.5},
+	"机弩术": {"cost": 18, "cooldown": 3.6, "range": 5.6, "damage": 1.05},
+	"踏燕行": {"cost": 20, "cooldown": 10.0, "duration": 5.0},
+	"调息": {"cost": 26, "cooldown": 12.0, "heal": 32},
+}
 
 var player: WuxiaActor3D
 var enemies: Array[WuxiaActor3D] = []
@@ -31,7 +38,14 @@ var target_label: Label
 var target_health_bar: ProgressBar
 var skill_buttons: Array[Button] = []
 var qinggong_time := 0.0
-var heal_cooldown := 0.0
+var queued_skill := ""
+var skill_cooldowns := {
+	"伏虎掌": 0.0,
+	"机弩术": 0.0,
+	"踏燕行": 0.0,
+	"调息": 0.0,
+}
+var inner_power_regen_buffer := 0.0
 var hud_layer: CanvasLayer
 var active_window: Panel
 var restored_world: Dictionary = {}
@@ -334,9 +348,7 @@ func _select_enemy(enemy: WuxiaActor3D) -> void:
 	target_label.text = "目标｜%s  %d/%d" % [enemy.display_name, enemy.health, enemy.max_health]
 	target_health_bar.max_value = enemy.max_health
 	target_health_bar.value = enemy.health
-	GameState.set_message("已锁定%s，少侠将自动接近并施展%s。" % [
-		enemy.display_name, GameState.selected_skill
-	])
+	GameState.set_message("已锁定%s，将自动施展青冥剑式；点击技能栏可排队释放绝技。" % enemy.display_name)
 
 
 func _clear_target() -> void:
@@ -345,6 +357,7 @@ func _clear_target() -> void:
 		selected_enemy.combat_target = null
 	selected_enemy = null
 	player.combat_target = null
+	queued_skill = ""
 	target_label.text = "目标｜尚未选中"
 	target_health_bar.value = 0
 
@@ -352,7 +365,15 @@ func _clear_target() -> void:
 func _physics_process(delta: float) -> void:
 	retarget_time = maxf(0.0, retarget_time - delta)
 	enemy_attack_time = maxf(0.0, enemy_attack_time - delta)
-	heal_cooldown = maxf(0.0, heal_cooldown - delta)
+	for skill_name in skill_cooldowns:
+		skill_cooldowns[skill_name] = maxf(
+			0.0, float(skill_cooldowns[skill_name]) - delta
+		)
+	inner_power_regen_buffer += delta * (2.0 if is_instance_valid(selected_enemy) else 4.5)
+	if inner_power_regen_buffer >= 1.0:
+		var recovered := floori(inner_power_regen_buffer)
+		inner_power_regen_buffer -= recovered
+		GameState.restore_inner_power(recovered)
 	dungeon_hazard_cooldown = maxf(0.0, dungeon_hazard_cooldown - delta)
 	if qinggong_time > 0.0:
 		qinggong_time = maxf(0.0, qinggong_time - delta)
@@ -363,6 +384,7 @@ func _physics_process(delta: float) -> void:
 	_update_enemy_combat()
 	_update_dungeon_hazards()
 	_update_boss_mechanics(delta)
+	_refresh_skill_buttons()
 	if is_instance_valid(environment_label):
 		environment_label.text = "%s · %s" % [
 			world.get_time_label(), world.get_weather_label()
@@ -586,12 +608,16 @@ func _update_player_combat() -> void:
 		return
 	if not is_instance_valid(selected_enemy):
 		return
+	var skill_name := queued_skill if not queued_skill.is_empty() else "青冥剑式"
+	var skill: Dictionary = SKILL_DATA[skill_name]
+	var attack_range := float(skill["range"])
 	var distance := player.global_position.distance_to(selected_enemy.global_position)
-	if distance > 1.35:
+	if distance > attack_range:
 		if retarget_time <= 0.0:
 			var approach := (
 				selected_enemy.global_position
-				+ selected_enemy.global_position.direction_to(player.global_position) * 1.1
+				+ selected_enemy.global_position.direction_to(player.global_position)
+				* maxf(0.9, attack_range - 0.2)
 			)
 			player.command_move(approach)
 			retarget_time = 0.35
@@ -599,20 +625,32 @@ func _update_player_combat() -> void:
 	player.stop()
 	if player.attack_cooldown > 0.0:
 		return
-	player.attack_cooldown = 0.72
+	var inner_power_cost := int(skill["cost"])
+	if inner_power_cost > 0 and not GameState.spend_inner_power(inner_power_cost):
+		queued_skill = ""
+		GameState.set_message("内力不足，无法施展%s；已继续使用青冥剑式。" % skill_name)
+		return
+	if skill_cooldowns.has(skill_name):
+		skill_cooldowns[skill_name] = float(skill["cooldown"])
+	queued_skill = ""
+	GameState.selected_skill = skill_name
+	player.attack_cooldown = 0.48 if skill_name != "青冥剑式" else float(skill["cooldown"])
 	player.play_attack()
 	world.play_skill_effect(
-		GameState.selected_skill, player.global_position, selected_enemy.global_position
+		skill_name, player.global_position, selected_enemy.global_position
 	)
-	var damage := GameState.get_attack()
-	if GameState.selected_skill == "伏虎掌":
-		damage = roundi(float(GameState.get_attack()) * 1.25)
-	elif GameState.selected_skill == "机弩术":
-		damage = roundi(float(GameState.get_attack()) * 0.85)
+	var damage := roundi(float(GameState.get_attack()) * float(skill["damage"]))
 	var target := selected_enemy
 	target.take_damage(damage)
+	if (
+		skill_name == "伏虎掌"
+		and target.display_name == "寂音院主·法砚"
+		and is_instance_valid(boss_telegraph)
+	):
+		boss_telegraph_time += 0.35
+		boss_telegraph_total += 0.35
 	AudioManager.play_hit()
-	world.shake_camera(0.11)
+	world.shake_camera(0.16 if skill_name == "伏虎掌" else 0.11)
 	_show_damage(
 		target.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
 	)
@@ -621,9 +659,12 @@ func _update_player_combat() -> void:
 			target.display_name, target.health, target.max_health
 		]
 		target_health_bar.value = target.health
-		GameState.set_message("%s命中%s，造成 %d 点伤害。" % [
-			GameState.selected_skill, target.display_name, damage
-		])
+		var combat_message := "%s命中%s，造成 %d 点伤害。" % [
+			skill_name, target.display_name, damage
+		]
+		if skill_name == "伏虎掌" and is_instance_valid(boss_telegraph):
+			combat_message += " 刚劲扰乱院主气息，蓄力延长 0.35 息。"
+		GameState.set_message(combat_message)
 
 
 func _update_enemy_combat() -> void:
@@ -699,6 +740,7 @@ func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 	if selected_enemy == enemy:
 		selected_enemy = null
 		player.combat_target = null
+		queued_skill = ""
 	enemies.erase(enemy)
 	enemy.play_defeat()
 	get_tree().create_timer(0.55).timeout.connect(enemy.queue_free)
@@ -870,7 +912,9 @@ func _create_hud() -> void:
 			Vector2(13 + index * 106, 10), Vector2(96, 68)
 		)
 		button.set_meta("skill_name", skill_names[index])
-		button.tooltip_text = "点击施展%s" % skill_names[index]
+		button.set_meta("skill_mark", skill_marks[index])
+		button.tooltip_text = _skill_tooltip(skill_names[index])
+		button.add_theme_font_size_override("font_size", 13)
 		button.pressed.connect(_activate_skill.bind(skill_names[index]))
 		skill_buttons.append(button)
 	_add_label(
@@ -913,8 +957,12 @@ func _refresh_hud() -> void:
 	message_label.text = GameState.message
 	for button in skill_buttons:
 		var skill_name := str(button.get_meta("skill_name"))
-		var selected := skill_name == GameState.selected_skill
+		var selected := (
+			skill_name == queued_skill
+			or (queued_skill.is_empty() and skill_name == "青冥剑式")
+		)
 		button.modulate = Color.WHITE if selected else Color(0.72, 0.72, 0.67)
+	_refresh_skill_buttons()
 
 
 func _refresh_cloud_ford_hud() -> void:
@@ -998,24 +1046,77 @@ func _refresh_dungeon_hud() -> void:
 
 
 func _activate_skill(skill_name: String) -> void:
+	if not SKILL_DATA.has(skill_name):
+		return
+	var skill: Dictionary = SKILL_DATA[skill_name]
+	var cooldown_left := float(skill_cooldowns.get(skill_name, 0.0))
+	if cooldown_left > 0.0:
+		GameState.set_message("%s尚在调息，还需 %.1f 息。" % [skill_name, cooldown_left])
+		return
+	var cost := int(skill["cost"])
+	if GameState.player_inner_power < cost:
+		GameState.set_message("内力不足：%s需要 %d 点内力。" % [skill_name, cost])
+		return
 	if skill_name == "踏燕行":
-		qinggong_time = 5.0
+		GameState.spend_inner_power(cost)
+		skill_cooldowns[skill_name] = float(skill["cooldown"])
+		qinggong_time = float(skill["duration"])
 		player.move_speed = 7.8
+		GameState.selected_skill = skill_name
 		GameState.set_message("踏燕行已施展：五息之内移动速度提升。")
 		return
 	if skill_name == "调息":
-		if heal_cooldown > 0.0:
-			GameState.set_message("调息尚未恢复，还需 %.1f 息。" % heal_cooldown)
-			return
 		if GameState.player_health >= GameState.player_max_health:
 			GameState.set_message("当前气血充盈，无需调息。")
 			return
-		heal_cooldown = 8.0
-		GameState.heal_player(25)
-		GameState.set_message("运转周天，恢复 25 点气血。")
+		GameState.spend_inner_power(cost)
+		skill_cooldowns[skill_name] = float(skill["cooldown"])
+		GameState.selected_skill = skill_name
+		GameState.heal_player(int(skill["heal"]))
+		GameState.set_message("运转周天，消耗 %d 点内力并恢复 %d 点气血。" % [
+			cost, int(skill["heal"])
+		])
 		return
+	if skill_name == "青冥剑式":
+		queued_skill = ""
+		GameState.selected_skill = skill_name
+		GameState.set_message("已切回青冥剑式，将对选中目标持续自动攻击。")
+		return
+	if not is_instance_valid(selected_enemy):
+		GameState.set_message("请先点击选择敌人，再施展%s。" % skill_name)
+		return
+	queued_skill = skill_name
 	GameState.selected_skill = skill_name
-	GameState.set_message("已切换为%s，点击敌人即可自动施展。" % skill_name)
+	retarget_time = 0.0
+	GameState.set_message("%s已排入施放队列，少侠会自动接近有效射程。" % skill_name)
+
+
+func _refresh_skill_buttons() -> void:
+	for button in skill_buttons:
+		var skill_name := str(button.get_meta("skill_name"))
+		var mark := str(button.get_meta("skill_mark"))
+		var skill: Dictionary = SKILL_DATA[skill_name]
+		var cooldown_left := float(skill_cooldowns.get(skill_name, 0.0))
+		var status := "自动攻击" if skill_name == "青冥剑式" else "%d 内力" % int(skill["cost"])
+		if cooldown_left > 0.05:
+			status = "%.1f 息" % cooldown_left
+		elif queued_skill == skill_name:
+			status = "等待施放"
+		button.text = "%s %s\n%s" % [mark, skill_name, status]
+
+
+func _skill_tooltip(skill_name: String) -> String:
+	var descriptions := {
+		"青冥剑式": "基础自动攻击｜近战｜不消耗内力",
+		"伏虎掌": "150% 外功伤害｜近战｜可延缓院主蓄力",
+		"机弩术": "105% 外功伤害｜5.6 丈远程射程",
+		"踏燕行": "五息内大幅提高移动速度",
+		"调息": "恢复 32 点气血",
+	}
+	var skill: Dictionary = SKILL_DATA[skill_name]
+	return "%s\n消耗：%d 内力　冷却：%.1f 息" % [
+		descriptions[skill_name], int(skill["cost"]), float(skill["cooldown"])
+	]
 
 
 func _track_quest() -> void:
@@ -1136,11 +1237,11 @@ func _open_martial_window() -> void:
 	_close_active_window()
 	active_window = _window("武学谱录", "武学")
 	var descriptions := [
-		["青冥剑式", "均衡剑法，造成 100% 外功伤害。"],
-		["伏虎掌", "刚猛掌法，造成 125% 外功伤害。"],
-		["机弩术", "远射机关，造成 85% 外功伤害。"],
-		["踏燕行", "五息之内大幅提升移动速度。"],
-		["调息", "恢复气血，使用后需要八息调养。"],
+		["青冥剑式", "基础自动攻击｜100% 外功｜0 内力"],
+		["伏虎掌", "150% 外功｜14 内力｜2.8 息冷却｜延缓首领蓄力"],
+		["机弩术", "105% 外功｜18 内力｜3.6 息冷却｜5.6 丈射程"],
+		["踏燕行", "20 内力｜10 息冷却｜五息内大幅提升移动速度"],
+		["调息", "26 内力｜12 息冷却｜恢复 32 点气血"],
 	]
 	for index in descriptions.size():
 		_add_label(
