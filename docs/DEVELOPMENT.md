@@ -8,6 +8,7 @@
 - `godot/scripts/main.gd`：鼠标指令、自动追击战斗和网游式 HUD。
 - `godot/scripts/wuxia_actor_3d.gd`：有关节的低多边形武侠角色、动画状态机、移动与战斗。
 - `godot/scripts/cloud_ford_world_3d.gd`：云津渡实时 3D 场景、昼夜细雨、遮挡渐隐、镜头反馈与鼠标射线换算。
+- `godot/scripts/silent_temple_world_3d.gd`：寂音禅院独立地图、夜雨、牢房、机关踏板、总闸与导航区域。
 - `godot/scripts/game_state.gd`：属性、背包、装备、任务、存档与设置状态。
 - `godot/scripts/audio_manager.gd`：UI、战斗、拾取和任务反馈音效。
 - `installer/luodong-legendary.iss`：可自选安装目录的压缩安装包定义。
@@ -21,6 +22,11 @@
 两阶段任务状态机，但分别奖励声望或锻造材料；第一轮暗桩清剿完成后会动态
 生成寒岭追兵，最终奖励进阶兵器并触发境界成长。路线、任务阶段、声望、
 经验、属性上限和敌人存活状态均写入离线存档。
+
+完成序章后可从沈砚对话进入寂音禅院。副本状态依次为夜探守卫、关闭机关、
+营救顾行舟、院主首领战和结局裁定。副本与云津渡共用角色实例和 HUD，
+切换时重建世界、NPC 与敌人波次；存档会记录 `current_zone`、副本状态、
+结局以及当前区域内仍存活的敌人。
 
 ## 本地运行
 

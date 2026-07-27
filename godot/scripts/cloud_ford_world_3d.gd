@@ -16,6 +16,7 @@ var occluder_groups: Array[Dictionary] = []
 var rain: GPUParticles3D
 var camera_shake := 0.0
 var camera_shake_phase := 0.0
+var mechanism_marker: Node3D
 
 
 func _ready() -> void:
@@ -121,6 +122,14 @@ func get_time_label() -> String:
 
 func get_weather_label() -> String:
 	return "薄雾细雨"
+
+
+func get_location_label() -> String:
+	return "云津渡"
+
+
+func set_mechanism_active(_active: bool) -> void:
+	pass
 
 
 func screen_to_ground(screen_position: Vector2) -> Vector3:

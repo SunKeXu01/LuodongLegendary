@@ -28,6 +28,10 @@ const ITEM_DEFINITIONS := {
 		"name": "寒岭雁翎刀", "type": "weapon", "attack": 9,
 		"description": "从寒岭追兵手中缴获的精钢长刀，锋口沉稳。"
 	},
+	"silent_temple_manual": {
+		"name": "寂音机关谱", "type": "accessory", "attack": 3, "defense": 4,
+		"description": "记载禅院暗门与铜钟机关的手抄谱册。"
+	},
 }
 const SAVE_VERSION := 1
 const SAVE_PATH := "user://luodong_save.json"
@@ -48,6 +52,8 @@ var quest_state: String = "available"
 var quest_route: String = ""
 var cloud_ford_reputation: int = 0
 var evidence_count: int = 0
+var dungeon_state: String = "locked"
+var dungeon_ending: String = ""
 var inventory: Array[Dictionary] = []
 var equipment := {"weapon": "", "armor": "", "accessory": ""}
 var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
@@ -77,6 +83,8 @@ func reset() -> void:
 	quest_route = ""
 	cloud_ford_reputation = 0
 	evidence_count = 0
+	dungeon_state = "locked"
+	dungeon_ending = ""
 	inventory = [
 		{"id": "worn_sword", "count": 1},
 		{"id": "healing_salve", "count": 2},
@@ -239,6 +247,71 @@ func finish_quest() -> void:
 	set_message("序章完成：寒岭雁翎刀已自动装备，云津渡声望与境界均获提升。")
 
 
+func begin_silent_temple() -> void:
+	if quest_state != "completed":
+		return
+	if dungeon_state == "locked":
+		dungeon_state = "infiltrate"
+		quest_text = "夜探寂音禅院"
+		set_message("已进入寂音禅院：避开机关踏板，先解决两名巡夜武僧。")
+
+
+func mark_temple_guards_cleared() -> void:
+	if dungeon_state != "infiltrate":
+		return
+	dungeon_state = "mechanism_available"
+	quest_text = "关闭地牢机关"
+	set_message("巡夜武僧已被制服。点击西偏殿前的机关总闸关闭陷阱。")
+
+
+func disable_temple_traps() -> void:
+	if dungeon_state != "mechanism_available":
+		return
+	dungeon_state = "rescue"
+	quest_text = "营救被困商客"
+	set_message("机关总闸已经关闭。前往东侧地牢营救被困商客顾行舟。")
+
+
+func rescue_temple_prisoner() -> void:
+	if dungeon_state != "rescue":
+		return
+	dungeon_state = "boss"
+	quest_text = "击败寂音院主"
+	set_message("牢门开启惊动了寂音院主。击败院主与两名护院武僧。")
+
+
+func mark_temple_boss_defeated() -> void:
+	if dungeon_state != "boss":
+		return
+	dungeon_state = "ending"
+	quest_text = "裁定禅院余众"
+	set_message("寂音院主已经伏诛。与顾行舟商议如何处置禅院余众和赃物。")
+
+
+func finish_silent_temple(ending: String) -> void:
+	if dungeon_state != "ending" or ending not in ["justice", "mercy", "treasure"]:
+		return
+	dungeon_state = "completed"
+	dungeon_ending = ending
+	quest_text = "寂音禅院暗局已破"
+	add_experience(65)
+	add_item("silent_temple_manual", 1)
+	equip_item("silent_temple_manual")
+	if ending == "justice":
+		add_silver(100)
+		cloud_ford_reputation += 3
+		set_message("禅院罪证已交按察司：获得碎银 100 两，声望大幅提升。")
+	elif ending == "mercy":
+		add_silver(70)
+		add_item("healing_salve", 3)
+		cloud_ford_reputation += 2
+		set_message("悔悟僧人获准离院：获得药品与碎银 70 两，江湖声望提升。")
+	else:
+		add_silver(180)
+		cloud_ford_reputation -= 1
+		set_message("少侠带走禅院私藏：获得碎银 180 两，但云津渡声望下降。")
+
+
 func add_experience(amount: int) -> bool:
 	if amount <= 0:
 		return false
@@ -281,6 +354,10 @@ func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
 			"cloud_ford_reputation": cloud_ford_reputation,
 			"evidence_count": evidence_count,
 		},
+		"dungeon": {
+			"state": dungeon_state,
+			"ending": dungeon_ending,
+		},
 		"inventory": inventory.duplicate(true),
 		"equipment": equipment.duplicate(true),
 		"world": world_snapshot.duplicate(true),
@@ -320,6 +397,9 @@ func load_game(path := SAVE_PATH) -> Dictionary:
 	quest_route = str(quest_data.get("route", ""))
 	cloud_ford_reputation = int(quest_data.get("cloud_ford_reputation", 0))
 	evidence_count = int(quest_data.get("evidence_count", 0))
+	var dungeon_data: Dictionary = parsed.get("dungeon", {})
+	dungeon_state = str(dungeon_data.get("state", "locked"))
+	dungeon_ending = str(dungeon_data.get("ending", ""))
 	inventory.assign(parsed.get("inventory", []))
 	equipment = parsed.get(
 		"equipment", {"weapon": "worn_sword", "armor": "", "accessory": ""}

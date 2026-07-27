@@ -30,7 +30,13 @@
     {
       "id": "silent-temple",
       "title": "寂音禅院",
-      "features": ["潜入", "机关", "地牢探索", "多结局"]
+      "features": ["潜入", "机关", "地牢探索", "首领战", "多结局"],
+      "stages": ["夜探巡逻守卫", "关闭机关总闸", "营救顾行舟", "击败寂音院主", "裁定禅院余众"],
+      "endings": [
+        { "id": "justice", "title": "罪证交官", "rewardFocus": "区域声望" },
+        { "id": "mercy", "title": "宽宥悔悟者", "rewardFocus": "药品与声望" },
+        { "id": "treasure", "title": "带走赃银", "rewardFocus": "大量银两" }
+      ]
     },
     {
       "id": "hanling-escape",

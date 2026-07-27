@@ -46,8 +46,28 @@ func _ready() -> void:
 	_expect(GameState.get_attack() == 31, "升级并装备雁翎刀后攻击应为 31")
 	_expect(GameState.cloud_ford_reputation == 3, "追查路线完成序章应获得 3 点声望")
 
+	GameState.begin_silent_temple()
+	_expect(GameState.dungeon_state == "infiltrate", "完成序章后应能进入寂音禅院")
+	GameState.mark_temple_guards_cleared()
+	_expect(GameState.dungeon_state == "mechanism_available", "清除守卫后应开放机关目标")
+	GameState.disable_temple_traps()
+	_expect(GameState.dungeon_state == "rescue", "关闭总闸后应进入营救阶段")
+	GameState.rescue_temple_prisoner()
+	_expect(GameState.dungeon_state == "boss", "营救商客后应触发首领战")
+	GameState.mark_temple_boss_defeated()
+	_expect(GameState.dungeon_state == "ending", "击败院主后应进入结局选择")
+	GameState.finish_silent_temple("justice")
+	_expect(GameState.dungeon_state == "completed", "选择处置方案后副本应完成")
+	_expect(GameState.dungeon_ending == "justice", "副本应记录罪证交官结局")
+	_expect(GameState.silver == 175, "主线和副本应累计获得碎银 175 两")
+	_expect(GameState.cloud_ford_reputation == 6, "公断结局应额外增加 3 点声望")
+	_expect(GameState.equipment["accessory"] == "silent_temple_manual", "机关谱应自动装备")
+	_expect(GameState.get_attack() == 32, "副本装备完成后攻击应为 32")
+	_expect(GameState.get_defense() == 13, "副本装备完成后防御应为 13")
+
 	var test_save_path := "user://automated_state_test.json"
 	var snapshot := {
+		"current_zone": "silent_temple",
 		"player_position": [1.0, 0.0, 2.0],
 		"enemies": [],
 		"loot": [{"item_id": "cold_iron", "amount": 1, "position": [2.0, 0.0, 3.0]}],
@@ -58,11 +78,14 @@ func _ready() -> void:
 	var restored := GameState.load_game(test_save_path)
 	_expect(GameState.quest_state == "completed", "读取存档后任务状态应恢复")
 	_expect(GameState.quest_route == "investigate", "读取存档后路线选择应恢复")
-	_expect(GameState.cloud_ford_reputation == 3, "读取存档后声望应恢复")
+	_expect(GameState.cloud_ford_reputation == 6, "读取存档后声望应恢复")
+	_expect(GameState.dungeon_state == "completed", "读取存档后副本状态应恢复")
+	_expect(GameState.dungeon_ending == "justice", "读取存档后副本结局应恢复")
 	_expect(GameState.player_level == 9, "读取存档后境界应恢复")
 	_expect(GameState.player_max_health == 112, "读取存档后气血上限应恢复")
-	_expect(GameState.silver == 75, "读取存档后碎银应恢复")
+	_expect(GameState.silver == 175, "读取存档后碎银应恢复")
 	_expect(restored.get("loot", []).size() == 1, "读取存档后地面掉落应恢复")
+	_expect(restored.get("current_zone", "") == "silent_temple", "读取后所在区域应恢复")
 	_expect(is_equal_approx(float(restored.get("world_time", 0.0)), 0.72), "读取存档后时辰应恢复")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_save_path))
 
@@ -89,8 +112,39 @@ func _ready() -> void:
 	if followup_enemies.size() == 2:
 		_expect(followup_enemies[0].display_name == "寒岭追骑", "第一名追兵配置应正确")
 		_expect(followup_enemies[1].display_name == "武氏刀客", "第二名追兵配置应正确")
+	for enemy in followup_enemies:
+		enemy.queue_free()
+	followup_enemies.clear()
+	GameState.mark_quest_ready()
+	GameState.finish_quest()
+	main_scene.call("_enter_silent_temple")
+	_expect(main_scene.get("current_zone") == "silent_temple", "完成序章后应切换到禅院地图")
+	var temple_world = main_scene.get("world")
+	_expect(temple_world is SilentTempleWorld3D, "副本应使用独立的寂音禅院世界")
+	var temple_enemies: Array = main_scene.get("enemies")
+	_expect(temple_enemies.size() == 2, "初次进入禅院应生成两名巡夜守卫")
+	_expect(is_instance_valid(temple_world.mechanism_marker), "禅院地图应包含可交互机关总闸")
+	var dungeon_player = main_scene.get("player")
+	var health_before_trap := GameState.player_health
+	dungeon_player.global_position = Vector3(-2.0, 0.0, 1.3)
+	main_scene.call("_update_dungeon_hazards")
+	_expect(GameState.player_health == health_before_trap - 10, "踩中禅院踏板应损失 10 点气血")
+	for enemy in temple_enemies:
+		enemy.queue_free()
+	temple_enemies.clear()
+	GameState.mark_temple_guards_cleared()
+	GameState.disable_temple_traps()
+	main_scene.call("_rescue_temple_prisoner")
+	var boss_wave: Array = main_scene.get("enemies")
+	_expect(boss_wave.size() == 3, "营救商客后应生成院主与两名护院武僧")
+	if not boss_wave.is_empty():
+		_expect(boss_wave[0].display_name == "寂音院主·法砚", "首领波次应包含寂音院主")
+	boss_wave.clear()
 	main_scene.queue_free()
+	AudioManager.stop_all()
 	await get_tree().process_frame
+	await get_tree().process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(GameState.SAVE_PATH))
 
 	var test_settings_path := "user://automated_settings_test.json"
 	GameState.master_volume = 0.4

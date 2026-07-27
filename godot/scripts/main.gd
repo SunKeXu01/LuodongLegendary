@@ -3,6 +3,7 @@ extends Node2D
 const Actor = preload("res://scripts/wuxia_actor_3d.gd")
 const Minimap = preload("res://scripts/minimap_widget.gd")
 const CloudFordWorld = preload("res://scripts/cloud_ford_world_3d.gd")
+const SilentTempleWorld = preload("res://scripts/silent_temple_world_3d.gd")
 const LootPickup = preload("res://scripts/loot_pickup_3d.gd")
 
 var player: WuxiaActor3D
@@ -13,6 +14,7 @@ var quest_npc: WuxiaActor3D
 var loot_drops: Array[LootPickup3D] = []
 var pending_loot: LootPickup3D
 var pending_npc: WuxiaActor3D
+var pending_mechanism: Node3D
 var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
@@ -34,6 +36,11 @@ var hud_layer: CanvasLayer
 var active_window: Panel
 var restored_world: Dictionary = {}
 var environment_label: Label
+var minimap: MinimapWidget
+var location_label: Label
+var chapter_label: Label
+var current_zone := "cloud_ford"
+var dungeon_hazard_cooldown := 0.0
 
 
 func _ready() -> void:
@@ -43,6 +50,9 @@ func _ready() -> void:
 			GameState.reset()
 	else:
 		GameState.reset()
+	current_zone = str(restored_world.get("current_zone", "cloud_ford"))
+	if current_zone == "silent_temple" and GameState.dungeon_state == "locked":
+		current_zone = "cloud_ford"
 	GameState.apply_settings()
 	_create_background()
 	_create_player()
@@ -56,7 +66,11 @@ func _ready() -> void:
 
 
 func _create_background() -> void:
-	world = CloudFordWorld.new()
+	world = (
+		SilentTempleWorld.new()
+		if current_zone == "silent_temple"
+		else CloudFordWorld.new()
+	)
 	add_child(world)
 
 	var shade := ColorRect.new()
@@ -71,12 +85,22 @@ func _create_player() -> void:
 	player = Actor.new()
 	player.display_name = "青冥门少侠"
 	player.max_health = GameState.player_max_health
-	player.position = Vector3(-1.5, 0.0, 4.8)
+	player.position = (
+		Vector3(0.0, 0.0, 6.0)
+		if current_zone == "silent_temple"
+		else Vector3(-1.5, 0.0, 4.8)
+	)
 	world.add_actor(player)
 	world.set_follow_target(player)
 
 
 func _create_enemies() -> void:
+	if current_zone == "silent_temple":
+		if GameState.dungeon_state == "infiltrate":
+			_spawn_enemy_wave(_temple_guard_specs())
+		elif GameState.dungeon_state == "boss":
+			_spawn_enemy_wave(_temple_boss_specs())
+		return
 	if GameState.quest_state in ["followup_available", "second_ready", "completed"]:
 		return
 	if GameState.quest_state == "second_accepted":
@@ -95,8 +119,23 @@ func _initial_enemy_specs() -> Array:
 
 func _followup_enemy_specs() -> Array:
 	return [
-		["寒岭追骑", Vector3(-8.0, 0.0, -1.4), 112],
-		["武氏刀客", Vector3(-5.8, 0.0, -3.0), 128],
+		["寒岭追骑", Vector3(-8.0, 0.0, -1.4), 112, 16],
+		["武氏刀客", Vector3(-5.8, 0.0, -3.0), 128, 17],
+	]
+
+
+func _temple_guard_specs() -> Array:
+	return [
+		["巡夜武僧", Vector3(-3.8, 0.0, 2.2), 118, 17],
+		["持棍戒僧", Vector3(3.6, 0.0, 0.2), 136, 18],
+	]
+
+
+func _temple_boss_specs() -> Array:
+	return [
+		["寂音院主·法砚", Vector3(0.0, 0.0, -3.8), 260, 25],
+		["护院武僧·左", Vector3(-3.2, 0.0, -2.5), 120, 18],
+		["护院武僧·右", Vector3(3.2, 0.0, -2.5), 120, 18],
 	]
 
 
@@ -106,6 +145,7 @@ func _spawn_enemy_wave(specs: Array) -> void:
 		enemy.display_name = spec[0]
 		enemy.position = spec[1]
 		enemy.max_health = spec[2]
+		enemy.attack_power = int(spec[3]) if spec.size() > 3 else 12
 		enemy.hostile = true
 		enemy.move_speed = 3.2
 		enemy.defeated.connect(_on_enemy_defeated)
@@ -116,10 +156,18 @@ func _spawn_enemy_wave(specs: Array) -> void:
 
 func _create_quest_npc() -> void:
 	quest_npc = Actor.new()
-	quest_npc.display_name = "渡口巡检·沈砚"
-	quest_npc.position = Vector3(-4.5, 0.0, 1.2)
+	if current_zone == "silent_temple":
+		quest_npc.display_name = "被困商客·顾行舟"
+		quest_npc.position = Vector3(7.2, 0.0, -0.8)
+	else:
+		quest_npc.display_name = "渡口巡检·沈砚"
+		quest_npc.position = Vector3(-4.5, 0.0, 1.2)
 	quest_npc.move_speed = 4.0
 	world.add_actor(quest_npc)
+	if current_zone == "silent_temple":
+		world.set_mechanism_active(
+			GameState.dungeon_state in ["infiltrate", "mechanism_available"]
+		)
 
 
 func _apply_world_snapshot() -> void:
@@ -180,6 +228,7 @@ func _world_snapshot() -> Dictionary:
 			"position": _vector_to_array(loot.global_position),
 		})
 	return {
+		"current_zone": current_zone,
 		"player_position": _vector_to_array(player.global_position),
 		"enemies": enemy_data,
 		"loot": loot_data,
@@ -212,6 +261,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
 		return
 	var click: Vector2 = mouse_event.position
+	if current_zone == "silent_temple" and is_instance_valid(world.mechanism_marker):
+		var mechanism_screen := world.world_to_screen(
+			world.mechanism_marker.global_position + Vector3(0, 1.0, 0)
+		)
+		if mechanism_screen.distance_to(click) <= 48.0:
+			if GameState.dungeon_state == "mechanism_available":
+				_command_use_mechanism()
+			elif GameState.dungeon_state == "infiltrate":
+				GameState.set_message("巡夜武僧正守着总闸，贸然靠近会惊动整个禅院。")
+			else:
+				GameState.set_message("机关总闸已经失去作用。")
+			return
 	for loot in loot_drops:
 		if not is_instance_valid(loot):
 			continue
@@ -238,6 +299,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _command_player(click: Vector2) -> void:
 	pending_loot = null
 	pending_npc = null
+	pending_mechanism = null
 	var destination := world.screen_to_ground(click)
 	player.command_move(destination)
 	world.show_move_marker(destination)
@@ -247,6 +309,7 @@ func _command_player(click: Vector2) -> void:
 func _select_enemy(enemy: WuxiaActor3D) -> void:
 	pending_loot = null
 	pending_npc = null
+	pending_mechanism = null
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
 		selected_enemy.combat_target = null
@@ -277,6 +340,7 @@ func _physics_process(delta: float) -> void:
 	retarget_time = maxf(0.0, retarget_time - delta)
 	enemy_attack_time = maxf(0.0, enemy_attack_time - delta)
 	heal_cooldown = maxf(0.0, heal_cooldown - delta)
+	dungeon_hazard_cooldown = maxf(0.0, dungeon_hazard_cooldown - delta)
 	if qinggong_time > 0.0:
 		qinggong_time = maxf(0.0, qinggong_time - delta)
 		if qinggong_time <= 0.0:
@@ -284,6 +348,7 @@ func _physics_process(delta: float) -> void:
 	_update_pending_interactions()
 	_update_player_combat()
 	_update_enemy_combat()
+	_update_dungeon_hazards()
 	if is_instance_valid(environment_label):
 		environment_label.text = "%s · %s" % [
 			world.get_time_label(), world.get_weather_label()
@@ -293,6 +358,7 @@ func _physics_process(delta: float) -> void:
 func _command_collect_loot(loot: LootPickup3D) -> void:
 	_clear_target()
 	pending_npc = null
+	pending_mechanism = null
 	pending_loot = loot
 	player.command_move(loot.global_position)
 	world.show_move_marker(loot.global_position)
@@ -302,11 +368,24 @@ func _command_collect_loot(loot: LootPickup3D) -> void:
 func _command_talk_to_npc(npc: WuxiaActor3D) -> void:
 	_clear_target()
 	pending_loot = null
+	pending_mechanism = null
 	pending_npc = npc
 	var approach := npc.global_position + npc.global_position.direction_to(player.global_position) * 1.15
 	player.command_move(approach)
 	world.show_move_marker(approach)
 	GameState.set_message("正在前往与%s交谈。" % npc.display_name)
+
+
+func _command_use_mechanism() -> void:
+	_close_active_window()
+	_clear_target()
+	pending_loot = null
+	pending_npc = null
+	pending_mechanism = world.mechanism_marker
+	var approach := pending_mechanism.global_position + Vector3(0.9, 0, 0.4)
+	player.command_move(approach)
+	world.show_move_marker(approach)
+	GameState.set_message("正在靠近机关总闸。")
 
 
 func _update_pending_interactions() -> void:
@@ -320,6 +399,45 @@ func _update_pending_interactions() -> void:
 			var npc := pending_npc
 			pending_npc = null
 			_open_npc_dialogue(npc)
+		return
+	if is_instance_valid(pending_mechanism):
+		if player.global_position.distance_to(pending_mechanism.global_position) <= 1.45:
+			player.stop()
+			pending_mechanism = null
+			GameState.disable_temple_traps()
+			world.set_mechanism_active(false)
+			AudioManager.play_quest()
+			world.shake_camera(0.16)
+			_save_current_game()
+
+
+func _update_dungeon_hazards() -> void:
+	if (
+		current_zone != "silent_temple"
+		or GameState.dungeon_state not in ["infiltrate", "mechanism_available"]
+		or dungeon_hazard_cooldown > 0.0
+		or GameState.player_health <= 0
+	):
+		return
+	var point := Vector2(player.global_position.x, player.global_position.z)
+	var trap_areas := [
+		Rect2(-2.45, 0.85, 0.9, 0.9),
+		Rect2(-1.45, -0.95, 0.9, 0.9),
+		Rect2(-0.45, 0.85, 0.9, 0.9),
+		Rect2(0.55, -0.95, 0.9, 0.9),
+		Rect2(1.55, 0.85, 0.9, 0.9),
+	]
+	for area in trap_areas:
+		if not area.has_point(point):
+			continue
+		dungeon_hazard_cooldown = 1.25
+		GameState.damage_player(10)
+		player.play_hit()
+		AudioManager.play_hit()
+		world.shake_camera(0.28)
+		_show_damage(player.global_position + Vector3(0, 1.8, 0), 10, Color("#de8b64"))
+		GameState.set_message("踩中翻板暗弩，损失 10 点气血。关闭总闸可解除机关。")
+		return
 
 
 func _collect_loot(loot: LootPickup3D) -> void:
@@ -403,7 +521,7 @@ func _update_enemy_combat() -> void:
 			enemy.stop()
 			enemy.play_attack()
 			world.play_skill_effect("敌人反击", enemy.global_position, player.global_position)
-			var enemy_damage := maxi(1, 12 - GameState.get_defense())
+			var enemy_damage := maxi(1, enemy.attack_power - GameState.get_defense())
 			GameState.damage_player(enemy_damage)
 			player.play_hit()
 			AudioManager.play_hit()
@@ -444,7 +562,14 @@ func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 	target_label.text = "目标｜尚未选中"
 	target_health_bar.value = 0
 	if enemies.is_empty():
-		GameState.mark_quest_ready()
+		if current_zone == "silent_temple":
+			if GameState.dungeon_state == "infiltrate":
+				GameState.mark_temple_guards_cleared()
+				world.set_mechanism_active(true)
+			elif GameState.dungeon_state == "boss":
+				GameState.mark_temple_boss_defeated()
+		else:
+			GameState.mark_quest_ready()
 	_save_current_game()
 
 
@@ -456,6 +581,10 @@ func _spawn_loot(enemy_name: String, at: Vector3) -> void:
 		item_id = "monk_bracer"
 	elif enemy_name in ["寒岭追骑", "武氏刀客"]:
 		item_id = "cold_iron"
+	elif enemy_name == "寂音院主·法砚":
+		item_id = "cold_iron"
+	elif enemy_name.begins_with("护院") or enemy_name in ["巡夜武僧", "持棍戒僧"]:
+		item_id = "healing_salve"
 	var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
 	var loot: LootPickup3D = LootPickup.new()
 	loot.configure(item_id, str(definition["name"]), 1)
@@ -491,7 +620,7 @@ func _create_hud() -> void:
 
 	var chapter := _panel(Vector2(482, 14), Vector2(316, 40), Color(0.025, 0.035, 0.03, 0.82))
 	hud.add_child(chapter)
-	_add_label(
+	chapter_label = _add_label(
 		chapter, "明中叶 · 云津渡  |  第一回 渡口风波",
 		Vector2(13, 8), Vector2(290, 25), 14, Color("#dac48c"), true
 	)
@@ -547,12 +676,14 @@ func _create_hud() -> void:
 	target_health_bar.add_theme_stylebox_override("fill", _style(Color("#9f3634"), 3))
 	target_panel.add_child(target_health_bar)
 
-	var minimap: MinimapWidget = Minimap.new()
+	minimap = Minimap.new()
 	minimap.position = Vector2(1070, 16)
 	minimap.size = Vector2(190, 190)
 	minimap.configure(player, enemies)
 	hud.add_child(minimap)
-	_add_label(minimap, "云津渡", Vector2(57, 160), Vector2(78, 23), 14, Color("#f0d993"), true)
+	location_label = _add_label(
+		minimap, "", Vector2(45, 160), Vector2(100, 23), 14, Color("#f0d993"), true
+	)
 	environment_label = _add_label(
 		minimap, "", Vector2(35, 137), Vector2(120, 20), 11, Color("#c7d8cf"), true
 	)
@@ -623,6 +754,24 @@ func _refresh_hud() -> void:
 	experience_bar.value = GameState.player_experience
 	level_label.text = "%d境 · 青冥门" % GameState.player_level
 	silver_label.text = "◆ 碎银  %d" % GameState.silver
+	location_label.text = world.get_location_label()
+	chapter_label.text = (
+		"明中叶 · 寂音禅院  |  第二回 古刹暗局"
+		if current_zone == "silent_temple"
+		else "明中叶 · 云津渡  |  第一回 渡口风波"
+	)
+	if current_zone == "silent_temple":
+		_refresh_dungeon_hud()
+	else:
+		_refresh_cloud_ford_hud()
+	message_label.text = GameState.message
+	for button in skill_buttons:
+		var skill_name := str(button.get_meta("skill_name"))
+		var selected := skill_name == GameState.selected_skill
+		button.modulate = Color.WHITE if selected else Color(0.72, 0.72, 0.67)
+
+
+func _refresh_cloud_ford_hud() -> void:
 	match GameState.quest_state:
 		"available":
 			quest_title_label.text = "◆ 拜访渡口巡检"
@@ -656,14 +805,46 @@ func _refresh_hud() -> void:
 			quest_description_label.text = "追兵已经击退，向沈砚禀明结果。"
 			quest_count.text = "序章可以交付"
 		"completed":
-			quest_title_label.text = "◇ 云津渡风波已平"
-			quest_description_label.text = "渡口暂时恢复了往日秩序。"
-			quest_count.text = "任务已完成"
-	message_label.text = GameState.message
-	for button in skill_buttons:
-		var skill_name := str(button.get_meta("skill_name"))
-		var selected := skill_name == GameState.selected_skill
-		button.modulate = Color.WHITE if selected else Color(0.72, 0.72, 0.67)
+			if GameState.dungeon_state == "locked":
+				quest_title_label.text = "◆ 寂音禅院线索"
+				quest_description_label.text = "沈砚查到失踪商旅被押往深山古刹。"
+				quest_count.text = "与沈砚交谈进入副本"
+			elif GameState.dungeon_state == "completed":
+				quest_title_label.text = "◇ 寂音禅院暗局已破"
+				quest_description_label.text = "失踪案已了结，渡口暂时恢复秩序。"
+				quest_count.text = "副本已完成"
+			else:
+				quest_title_label.text = "◆ 重返寂音禅院"
+				quest_description_label.text = "寂音禅院的调查仍未结束。"
+				quest_count.text = "与沈砚交谈返回副本"
+
+
+func _refresh_dungeon_hud() -> void:
+	match GameState.dungeon_state:
+		"infiltrate":
+			quest_title_label.text = "◆ 夜探寂音禅院"
+			quest_description_label.text = "避开中轴踏板，制服两名巡夜武僧。"
+			quest_count.text = "%d / 2 名守卫已制服" % (2 - enemies.size())
+		"mechanism_available":
+			quest_title_label.text = "◆ 关闭机关总闸"
+			quest_description_label.text = "西偏殿前的橙色拉杆控制暗弩与牢门。"
+			quest_count.text = "点击场景中的机关总闸"
+		"rescue":
+			quest_title_label.text = "◆ 营救被困商客"
+			quest_description_label.text = "机关已经关闭，前往东侧地牢。"
+			quest_count.text = "与顾行舟交谈"
+		"boss":
+			quest_title_label.text = "◆ 击败寂音院主"
+			quest_description_label.text = "院主带着护院武僧赶到地牢前。"
+			quest_count.text = "%d / 3 名首领卫队已击败" % (3 - enemies.size())
+		"ending":
+			quest_title_label.text = "◆ 裁定禅院余众"
+			quest_description_label.text = "罪证、悔悟僧人与赃物都等待处置。"
+			quest_count.text = "与顾行舟选择副本结局"
+		"completed":
+			quest_title_label.text = "◇ 寂音禅院暗局已破"
+			quest_description_label.text = "副本结局已经写入江湖历程。"
+			quest_count.text = "可返回云津渡"
 
 
 func _activate_skill(skill_name: String) -> void:
@@ -688,16 +869,32 @@ func _activate_skill(skill_name: String) -> void:
 
 
 func _track_quest() -> void:
+	if current_zone == "silent_temple":
+		if GameState.dungeon_state == "mechanism_available":
+			_command_use_mechanism()
+			return
+		if GameState.dungeon_state in ["rescue", "ending", "completed"]:
+			_command_talk_to_npc(quest_npc)
+			return
+		if enemies.is_empty():
+			GameState.set_message("当前区域没有可以追踪的战斗目标。")
+			return
+		_select_nearest_enemy()
+		return
 	if GameState.quest_state in ["available", "ready", "followup_available", "second_ready"]:
 		_command_talk_to_npc(quest_npc)
 		return
 	if GameState.quest_state == "completed":
-		GameState.set_message("本章主线已经完成，新的江湖线索将在后续章节开放。")
+		_command_talk_to_npc(quest_npc)
 		return
 	if enemies.is_empty():
 		GameState.mark_quest_ready()
 		_command_talk_to_npc(quest_npc)
 		return
+	_select_nearest_enemy()
+
+
+func _select_nearest_enemy() -> void:
 	var nearest := enemies[0]
 	var nearest_distance := player.global_position.distance_to(nearest.global_position)
 	for enemy in enemies:
@@ -816,16 +1013,37 @@ func _open_quest_window() -> void:
 		active_window, details, Vector2(24, 105), Vector2(410, 80),
 		15, Color("#d4ccb6")
 	)
-	var route_name := "尚未抉择"
-	if GameState.quest_route == "protect":
-		route_name = "护送百姓"
-	elif GameState.quest_route == "investigate":
-		route_name = "追查证据"
-	var progress_text := "行动路线：%s\n云津渡声望：%d" % [
-		route_name, GameState.cloud_ford_reputation
-	]
-	if GameState.quest_route == "investigate":
-		progress_text += "\n已取得铜签：%d / 3" % GameState.evidence_count
+	var progress_text := ""
+	if current_zone == "silent_temple":
+		var stage_names := {
+			"infiltrate": "夜探禅院",
+			"mechanism_available": "关闭机关",
+			"rescue": "营救商客",
+			"boss": "院主决战",
+			"ending": "裁定余众",
+			"completed": "副本完成",
+		}
+		var ending_names := {
+			"": "尚未裁定",
+			"justice": "罪证交付按察司",
+			"mercy": "宽宥悔悟僧人",
+			"treasure": "带走禅院赃银",
+		}
+		progress_text = "副本阶段：%s\n最终裁定：%s" % [
+			stage_names.get(GameState.dungeon_state, "尚未进入"),
+			ending_names.get(GameState.dungeon_ending, "尚未裁定"),
+		]
+	else:
+		var route_name := "尚未抉择"
+		if GameState.quest_route == "protect":
+			route_name = "护送百姓"
+		elif GameState.quest_route == "investigate":
+			route_name = "追查证据"
+		progress_text = "行动路线：%s\n云津渡声望：%d" % [
+			route_name, GameState.cloud_ford_reputation
+		]
+		if GameState.quest_route == "investigate":
+			progress_text += "\n已取得铜签：%d / 3" % GameState.evidence_count
 	_add_label(
 		active_window, progress_text, Vector2(24, 176), Vector2(410, 72),
 		14, Color("#a9c5b3")
@@ -847,6 +1065,9 @@ func _handle_inventory_item(item_id: String) -> void:
 
 
 func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
+	if current_zone == "silent_temple":
+		_open_temple_dialogue()
+		return
 	_close_active_window()
 	active_window = _window("渡口巡检·沈砚", "对话", Vector2(365, 350), Vector2(550, 285))
 	if GameState.quest_state == "available":
@@ -913,9 +1134,17 @@ func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
 			action_text = "完成序章"
 			action = _turn_in_quest
 		"completed":
-			dialogue = "渡口虽已平静，寒岭武氏绝不会善罢甘休。寂音禅院似乎也与失踪商旅有关。"
-			action_text = "告辞"
-			action = _close_active_window
+			if GameState.dungeon_state == "completed":
+				dialogue = "寂音禅院的罪证已经送出，云津渡失踪案暂告一段落。少侠可先休整。"
+				action_text = "告辞"
+				action = _close_active_window
+			else:
+				dialogue = (
+					"失踪商旅最后都在寂音禅院附近出现。此处表面清修，"
+					+ "夜里却常有囚车入山。少侠可愿趁夜潜入查探？"
+				)
+				action_text = "前往禅院"
+				action = _enter_silent_temple
 	_add_label(
 		active_window, dialogue, Vector2(24, 56), Vector2(502, 92),
 		16, Color("#e5ddc9")
@@ -924,6 +1153,130 @@ func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
 	action_button.pressed.connect(action)
 	var leave := _button(active_window, "离开", Vector2(416, 205), Vector2(110, 42))
 	leave.pressed.connect(_close_active_window)
+
+
+func _open_temple_dialogue() -> void:
+	_close_active_window()
+	active_window = _window("被困商客·顾行舟", "对话", Vector2(365, 350), Vector2(550, 285))
+	if GameState.dungeon_state == "ending":
+		_add_label(
+			active_window,
+			"院主已死，地牢中留下罪证、愿意悔过的年轻僧人与一批无主赃银。少侠准备如何处置？",
+			Vector2(24, 54), Vector2(502, 72), 16, Color("#e5ddc9")
+		).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		var justice := _button(
+			active_window, "交付罪证\n声望最高", Vector2(20, 145), Vector2(158, 62)
+		)
+		justice.pressed.connect(_finish_temple.bind("justice"))
+		var mercy := _button(
+			active_window, "宽宥悔悟者\n药品奖励", Vector2(196, 145), Vector2(158, 62)
+		)
+		mercy.pressed.connect(_finish_temple.bind("mercy"))
+		var treasure := _button(
+			active_window, "带走赃银\n银两最高", Vector2(372, 145), Vector2(158, 62)
+		)
+		treasure.pressed.connect(_finish_temple.bind("treasure"))
+		return
+
+	var dialogue := ""
+	var action_text := ""
+	var action: Callable
+	match GameState.dungeon_state:
+		"infiltrate":
+			dialogue = "牢外仍有巡夜武僧，我不敢出声。中轴石道的暗色踏板会触发弩箭，少侠当心。"
+			action_text = "先清守卫"
+			action = _close_active_window
+		"mechanism_available":
+			dialogue = "牢门与暗弩都连着西偏殿前的橙色拉杆。先关闭总闸，才能打开牢门。"
+			action_text = "去关总闸"
+			action = _command_use_mechanism
+		"rescue":
+			dialogue = "总闸停了！快替我拉开牢门。院主发现后一定会带护院武僧赶来。"
+			action_text = "打开牢门"
+			action = _rescue_temple_prisoner
+		"boss":
+			dialogue = "院主就在大殿前！他手中掌握失踪商旅的账册，不能让他把证据毁掉。"
+			action_text = "迎战院主"
+			action = _close_active_window
+		"completed":
+			dialogue = "此间暗局已经了结。我会护送获救商旅下山，少侠也可返回云津渡复命。"
+			action_text = "返回云津渡"
+			action = _return_cloud_ford
+	_add_label(
+		active_window, dialogue, Vector2(24, 56), Vector2(502, 100),
+		16, Color("#e5ddc9")
+	).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var action_button := _button(active_window, action_text, Vector2(292, 205), Vector2(110, 42))
+	action_button.pressed.connect(action)
+	var leave := _button(active_window, "离开", Vector2(416, 205), Vector2(110, 42))
+	leave.pressed.connect(_close_active_window)
+
+
+func _rescue_temple_prisoner() -> void:
+	_close_active_window()
+	GameState.rescue_temple_prisoner()
+	_spawn_enemy_wave(_temple_boss_specs())
+	AudioManager.play_quest()
+	world.shake_camera(0.22)
+	_save_current_game()
+
+
+func _finish_temple(ending: String) -> void:
+	_close_active_window()
+	GameState.finish_silent_temple(ending)
+	AudioManager.play_quest()
+	_save_current_game()
+
+
+func _enter_silent_temple() -> void:
+	_close_active_window()
+	GameState.begin_silent_temple()
+	_switch_zone("silent_temple")
+
+
+func _return_cloud_ford() -> void:
+	_close_active_window()
+	_switch_zone("cloud_ford")
+
+
+func _switch_zone(zone_id: String) -> void:
+	if zone_id == current_zone or zone_id not in ["cloud_ford", "silent_temple"]:
+		return
+	_clear_target()
+	player.stop()
+	pending_loot = null
+	pending_npc = null
+	pending_mechanism = null
+	var old_world := world
+	enemies.clear()
+	loot_drops.clear()
+	quest_npc = null
+	current_zone = zone_id
+	world = SilentTempleWorld.new() if zone_id == "silent_temple" else CloudFordWorld.new()
+	add_child(world)
+	player.reparent(world.world_root)
+	player.position = (
+		Vector3(0, 0, 6.0)
+		if zone_id == "silent_temple"
+		else Vector3(-1.5, 0, 4.8)
+	)
+	world.set_follow_target(player)
+	old_world.queue_free()
+	_create_enemies()
+	_create_quest_npc()
+	minimap.configure(player, enemies)
+	minimap.world_rect = (
+		Rect2(-10.5, -7.5, 21.0, 15.0)
+		if zone_id == "silent_temple"
+		else Rect2(-11.5, -8.2, 23.0, 15.4)
+	)
+	GameState.set_message(
+		"已潜入寂音禅院，注意中轴机关。"
+		if zone_id == "silent_temple"
+		else "已返回云津渡。"
+	)
+	_refresh_hud()
+	_save_current_game()
 
 
 func _choose_quest_route(route: String) -> void:

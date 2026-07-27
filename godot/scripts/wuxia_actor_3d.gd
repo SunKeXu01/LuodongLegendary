@@ -7,6 +7,7 @@ signal defeated(actor: WuxiaActor3D)
 @export var hostile := false
 @export var max_health := 100
 @export var move_speed := 5.0
+@export var attack_power := 12
 
 var health: int
 var selected := false:
