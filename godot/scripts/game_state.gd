@@ -57,6 +57,7 @@ var dungeon_ending: String = ""
 var dungeon_approach: String = ""
 var inventory: Array[Dictionary] = []
 var equipment := {"weapon": "", "armor": "", "accessory": ""}
+var item_enhancement: Dictionary = {}
 var message: String = "点击任务追踪，前往拜访渡口巡检沈砚。"
 var master_volume := 0.72
 var fullscreen := false
@@ -92,6 +93,7 @@ func reset() -> void:
 		{"id": "healing_salve", "count": 2},
 	]
 	equipment = {"weapon": "worn_sword", "armor": "", "accessory": ""}
+	item_enhancement = {}
 	message = "点击任务追踪，前往拜访渡口巡检沈砚。"
 	state_changed.emit()
 	inventory_changed.emit()
@@ -195,6 +197,86 @@ func get_item_count(item_id: String) -> int:
 		if entry["id"] == item_id:
 			return int(entry["count"])
 	return 0
+
+
+func get_enhancement(item_id: String) -> int:
+	return clampi(int(item_enhancement.get(item_id, 0)), 0, 5)
+
+
+func get_equipped_name(slot: String) -> String:
+	var item_id := str(equipment.get(slot, ""))
+	if item_id.is_empty():
+		return "未装备"
+	var definition: Dictionary = ITEM_DEFINITIONS.get(item_id, {})
+	var item_name := str(definition.get("name", item_id))
+	var enhancement := get_enhancement(item_id)
+	return "%s +%d" % [item_name, enhancement] if enhancement > 0 else item_name
+
+
+func get_upgrade_cost(slot: String) -> Dictionary:
+	var item_id := str(equipment.get(slot, ""))
+	if item_id.is_empty():
+		return {
+			"available": false,
+			"reason": "当前没有可淬炼的装备。",
+			"current": 0,
+			"next": 0,
+			"material": 0,
+			"silver": 0,
+		}
+	var current := get_enhancement(item_id)
+	if current >= 5:
+		return {
+			"available": false,
+			"reason": "此件装备已淬炼至 +5。",
+			"item_id": item_id,
+			"name": get_equipped_name(slot),
+			"current": current,
+			"next": current,
+			"material": 0,
+			"silver": 0,
+		}
+	var next_level := current + 1
+	return {
+		"available": true,
+		"reason": "",
+		"item_id": item_id,
+		"name": get_equipped_name(slot),
+		"current": current,
+		"next": next_level,
+		"material": next_level,
+		"silver": 25 * next_level,
+	}
+
+
+func upgrade_equipment(slot: String) -> bool:
+	var cost := get_upgrade_cost(slot)
+	if not bool(cost.get("available", false)):
+		set_message(str(cost.get("reason", "当前装备无法淬炼。")))
+		return false
+	var material_cost := int(cost["material"])
+	var silver_cost := int(cost["silver"])
+	if get_item_count("cold_iron") < material_cost:
+		set_message("寒铁不足：淬炼至 +%d 需要 %d 份寒铁。" % [
+			int(cost["next"]), material_cost
+		])
+		return false
+	if silver < silver_cost:
+		set_message("碎银不足：淬炼至 +%d 需要 %d 两碎银。" % [
+			int(cost["next"]), silver_cost
+		])
+		return false
+	if not _remove_item_silently("cold_iron", material_cost):
+		return false
+	silver -= silver_cost
+	var item_id := str(cost["item_id"])
+	item_enhancement[item_id] = int(cost["next"])
+	message = "%s淬炼成功：兵刃提升至 +%d，外功攻击增加 2 点。" % [
+		str(ITEM_DEFINITIONS[item_id]["name"]), int(cost["next"])
+	]
+	inventory_changed.emit()
+	state_changed.emit()
+	return true
 
 
 func choose_quest_route(route: String) -> void:
@@ -391,6 +473,7 @@ func save_game(world_snapshot: Dictionary, path := SAVE_PATH) -> bool:
 		},
 		"inventory": inventory.duplicate(true),
 		"equipment": equipment.duplicate(true),
+		"item_enhancement": item_enhancement.duplicate(true),
 		"world": world_snapshot.duplicate(true),
 	}
 	var file := FileAccess.open(path, FileAccess.WRITE)
@@ -436,6 +519,7 @@ func load_game(path := SAVE_PATH) -> Dictionary:
 	equipment = parsed.get(
 		"equipment", {"weapon": "worn_sword", "armor": "", "accessory": ""}
 	).duplicate(true)
+	item_enhancement = parsed.get("item_enhancement", {}).duplicate(true)
 	message = "存档读取成功，江湖历程已经恢复。"
 	inventory_changed.emit()
 	state_changed.emit()
@@ -508,12 +592,32 @@ func toggle_fullscreen() -> void:
 
 func _equipment_bonus(stat_name: String) -> int:
 	var total := 0
-	for item_id in equipment.values():
+	for slot in equipment:
+		var item_id := str(equipment[slot])
 		if str(item_id).is_empty():
 			continue
 		var definition: Dictionary = ITEM_DEFINITIONS.get(item_id, {})
 		total += int(definition.get(stat_name, 0))
+		var enhancement := get_enhancement(item_id)
+		if slot == "weapon" and stat_name == "attack":
+			total += enhancement * 2
+		elif slot == "armor" and stat_name == "defense":
+			total += enhancement * 2
+		elif slot == "accessory" and stat_name in ["attack", "defense"]:
+			total += enhancement
 	return total
+
+
+func _remove_item_silently(item_id: String, amount: int) -> bool:
+	for index in range(inventory.size()):
+		var entry := inventory[index]
+		if entry["id"] != item_id or int(entry["count"]) < amount:
+			continue
+		entry["count"] = int(entry["count"]) - amount
+		if int(entry["count"]) <= 0:
+			inventory.remove_at(index)
+		return true
+	return false
 
 
 func add_silver(amount: int) -> void:

@@ -18,6 +18,7 @@ var enemies: Array[WuxiaActor3D] = []
 var selected_enemy: WuxiaActor3D
 var world: CloudFordWorld3D
 var quest_npc: WuxiaActor3D
+var smith_npc: WuxiaActor3D
 var loot_drops: Array[LootPickup3D] = []
 var pending_loot: LootPickup3D
 var pending_npc: WuxiaActor3D
@@ -188,9 +189,16 @@ func _create_quest_npc() -> void:
 	quest_npc.move_speed = 4.0
 	world.add_actor(quest_npc)
 	if current_zone == "silent_temple":
+		smith_npc = null
 		world.set_mechanism_active(
 			GameState.dungeon_state in ["infiltrate", "mechanism_available"]
 		)
+	else:
+		smith_npc = Actor.new()
+		smith_npc.display_name = "渡口铁匠·鲁三火"
+		smith_npc.position = Vector3(-5.8, 0.0, 4.6)
+		smith_npc.move_speed = 4.0
+		world.add_actor(smith_npc)
 
 
 func _apply_world_snapshot() -> void:
@@ -305,6 +313,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		var loot_screen := world.world_to_screen(loot.global_position + Vector3(0, 0.45, 0))
 		if loot_screen.distance_to(click) <= 34.0:
 			_command_collect_loot(loot)
+			return
+	if is_instance_valid(smith_npc):
+		var smith_screen := world.world_to_screen(
+			smith_npc.global_position + Vector3(0, 1.0, 0)
+		)
+		if smith_screen.distance_to(click) <= 46.0:
+			_command_talk_to_npc(smith_npc)
 			return
 	if is_instance_valid(quest_npc):
 		var npc_screen := world.world_to_screen(quest_npc.global_position + Vector3(0, 1.0, 0))
@@ -1188,9 +1203,13 @@ func _open_inventory_window() -> void:
 		var item_id := str(entry["id"])
 		var definition: Dictionary = GameState.ITEM_DEFINITIONS[item_id]
 		var equipped := item_id in GameState.equipment.values()
+		var enhancement := GameState.get_enhancement(item_id)
+		var display_name := str(definition["name"])
+		if enhancement > 0:
+			display_name += " +%d" % enhancement
 		var label := "%s%s  ×%d" % [
 			"◆ " if equipped else "",
-			definition["name"],
+			display_name,
 			int(entry["count"])
 		]
 		var item_button := _button(
@@ -1200,6 +1219,8 @@ func _open_inventory_window() -> void:
 			Vector2(200, 48)
 		)
 		item_button.tooltip_text = str(definition["description"])
+		if enhancement > 0:
+			item_button.tooltip_text += "\n淬炼等级：+%d" % enhancement
 		item_button.pressed.connect(_handle_inventory_item.bind(item_id))
 
 
@@ -1222,12 +1243,8 @@ func _open_character_window() -> void:
 	var slot_names := {"weapon": "兵刃", "armor": "护具", "accessory": "饰物"}
 	var row := 0
 	for slot in ["weapon", "armor", "accessory"]:
-		var item_id := str(GameState.equipment[slot])
-		var item_name := "未装备"
-		if not item_id.is_empty():
-			item_name = str(GameState.ITEM_DEFINITIONS[item_id]["name"])
 		_add_label(
-			active_window, "%s｜%s" % [slot_names[slot], item_name],
+			active_window, "%s｜%s" % [slot_names[slot], GameState.get_equipped_name(slot)],
 			Vector2(247, 94 + row * 48), Vector2(190, 34), 15, Color("#ded5bd")
 		)
 		row += 1
@@ -1317,11 +1334,14 @@ func _handle_inventory_item(item_id: String) -> void:
 	elif item_type in ["weapon", "armor", "accessory"]:
 		GameState.equip_item(item_id)
 	else:
-		GameState.set_message("%s是锻造材料，暂时无法直接使用。" % definition["name"])
+		GameState.set_message("%s是锻造材料，请前往云津渡寻找铁匠鲁三火。" % definition["name"])
 	_save_current_game()
 
 
-func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
+func _open_npc_dialogue(npc: WuxiaActor3D) -> void:
+	if npc == smith_npc:
+		_open_smith_window()
+		return
 	if current_zone == "silent_temple":
 		_open_temple_dialogue()
 		return
@@ -1410,6 +1430,55 @@ func _open_npc_dialogue(_npc: WuxiaActor3D) -> void:
 	action_button.pressed.connect(action)
 	var leave := _button(active_window, "离开", Vector2(416, 205), Vector2(110, 42))
 	leave.pressed.connect(_close_active_window)
+
+
+func _open_smith_window() -> void:
+	_close_active_window()
+	active_window = _window(
+		"渡口铁匠·鲁三火", "铁匠", Vector2(720, 160), Vector2(480, 390)
+	)
+	var cost := GameState.get_upgrade_cost("weapon")
+	var current_weapon := GameState.get_equipped_name("weapon")
+	_add_label(
+		active_window,
+		"“寒铁要慢火淬、急水收。手稳，刃才不会脆。”",
+		Vector2(24, 53), Vector2(430, 28), 14, Color("#b8ad92")
+	)
+	_add_label(
+		active_window,
+		"当前兵刃｜%s\n外功攻击｜%d\n持有材料｜寒铁 %d 份 · 碎银 %d 两" % [
+			current_weapon,
+			GameState.get_attack(),
+			GameState.get_item_count("cold_iron"),
+			GameState.silver,
+		],
+		Vector2(24, 94), Vector2(430, 88), 16, Color("#e3d7ba")
+	)
+	var cost_text := str(cost.get("reason", ""))
+	if bool(cost.get("available", false)):
+		cost_text = "下一等级｜+%d\n所需费用｜寒铁 %d 份 · 碎银 %d 两\n淬炼效果｜外功攻击永久增加 2 点" % [
+			int(cost["next"]), int(cost["material"]), int(cost["silver"])
+		]
+	_add_label(
+		active_window, cost_text,
+		Vector2(24, 194), Vector2(430, 86), 15, Color("#d9bb70")
+	)
+	var upgrade := _button(
+		active_window,
+		"淬炼兵刃" if bool(cost.get("available", false)) else "已达淬炼上限",
+		Vector2(252, 307), Vector2(128, 44)
+	)
+	upgrade.disabled = not bool(cost.get("available", false))
+	upgrade.tooltip_text = "稳定淬炼，不会随机损坏装备。"
+	upgrade.pressed.connect(_upgrade_weapon)
+	var leave := _button(active_window, "离开", Vector2(390, 307), Vector2(66, 44))
+	leave.pressed.connect(_close_active_window)
+
+
+func _upgrade_weapon() -> void:
+	if GameState.upgrade_equipment("weapon"):
+		AudioManager.play_quest()
+		_save_current_game()
 
 
 func _open_temple_dialogue() -> void:
@@ -1516,6 +1585,7 @@ func _switch_zone(zone_id: String) -> void:
 	enemies.clear()
 	loot_drops.clear()
 	quest_npc = null
+	smith_npc = null
 	current_zone = zone_id
 	world = SilentTempleWorld.new() if zone_id == "silent_temple" else CloudFordWorld.new()
 	add_child(world)
@@ -1601,6 +1671,9 @@ func _refresh_active_window() -> void:
 	if window_type in ["背包", "角色"]:
 		_close_active_window()
 		call_deferred("_open_system_panel", window_type)
+	elif window_type == "铁匠":
+		_close_active_window()
+		call_deferred("_open_smith_window")
 
 
 func _open_system_window() -> void:

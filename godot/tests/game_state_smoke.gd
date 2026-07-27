@@ -50,6 +50,17 @@ func _ready() -> void:
 	_expect(GameState.equipment["weapon"] == "hanling_blade", "新兵器应自动装备")
 	_expect(GameState.get_attack() == 31, "升级并装备雁翎刀后攻击应为 31")
 	_expect(GameState.cloud_ford_reputation == 3, "追查路线完成序章应获得 3 点声望")
+	var first_upgrade_cost := GameState.get_upgrade_cost("weapon")
+	_expect(int(first_upgrade_cost["material"]) == 1, "兵刃首次淬炼应消耗一份寒铁")
+	_expect(int(first_upgrade_cost["silver"]) == 25, "兵刃首次淬炼应消耗碎银 25 两")
+	_expect(GameState.upgrade_equipment("weapon"), "材料充足时兵刃应能淬炼至 +1")
+	_expect(GameState.get_enhancement("hanling_blade") == 1, "应记录雁翎刀 +1 强化等级")
+	_expect(GameState.get_item_count("cold_iron") == 1, "淬炼后应扣除一份寒铁")
+	_expect(GameState.silver == 50, "淬炼后应扣除碎银 25 两")
+	_expect(GameState.get_attack() == 33, "兵刃 +1 应增加两点外功攻击")
+	_expect(not GameState.upgrade_equipment("weapon"), "寒铁不足时不应允许继续淬炼")
+	_expect(GameState.get_item_count("cold_iron") == 1, "淬炼失败不应扣除寒铁")
+	_expect(GameState.silver == 50, "淬炼失败不应扣除碎银")
 
 	GameState.begin_silent_temple()
 	_expect(GameState.dungeon_state == "infiltrate", "完成序章后应能进入寂音禅院")
@@ -65,10 +76,10 @@ func _ready() -> void:
 	GameState.finish_silent_temple("justice")
 	_expect(GameState.dungeon_state == "completed", "选择处置方案后副本应完成")
 	_expect(GameState.dungeon_ending == "justice", "副本应记录罪证交官结局")
-	_expect(GameState.silver == 175, "主线和副本应累计获得碎银 175 两")
+	_expect(GameState.silver == 150, "扣除淬炼成本后应剩余碎银 150 两")
 	_expect(GameState.cloud_ford_reputation == 6, "公断结局应额外增加 3 点声望")
 	_expect(GameState.equipment["accessory"] == "silent_temple_manual", "机关谱应自动装备")
-	_expect(GameState.get_attack() == 32, "副本装备完成后攻击应为 32")
+	_expect(GameState.get_attack() == 34, "副本装备与 +1 兵刃完成后攻击应为 34")
 	_expect(GameState.get_defense() == 13, "副本装备完成后防御应为 13")
 
 	var test_save_path := "user://automated_state_test.json"
@@ -90,7 +101,9 @@ func _ready() -> void:
 	_expect(GameState.dungeon_approach == "force", "读取存档后潜入方式应恢复")
 	_expect(GameState.player_level == 9, "读取存档后境界应恢复")
 	_expect(GameState.player_max_health == 112, "读取存档后气血上限应恢复")
-	_expect(GameState.silver == 175, "读取存档后碎银应恢复")
+	_expect(GameState.silver == 150, "读取存档后碎银应恢复")
+	_expect(GameState.get_enhancement("hanling_blade") == 1, "读取存档后兵刃淬炼等级应恢复")
+	_expect(GameState.get_attack() == 34, "读取存档后淬炼属性应恢复")
 	_expect(restored.get("loot", []).size() == 1, "读取存档后地面掉落应恢复")
 	_expect(restored.get("current_zone", "") == "silent_temple", "读取后所在区域应恢复")
 	_expect(is_equal_approx(float(restored.get("world_time", 0.0)), 0.72), "读取存档后时辰应恢复")
@@ -105,6 +118,14 @@ func _ready() -> void:
 
 	var main_scene = load("res://scenes/main.tscn").instantiate()
 	add_child(main_scene)
+	_expect(is_instance_valid(main_scene.get("smith_npc")), "云津渡应生成可交互铁匠鲁三火")
+	main_scene.call("_open_smith_window")
+	var smith_window = main_scene.get("active_window")
+	_expect(
+		is_instance_valid(smith_window) and smith_window.get_meta("window_type", "") == "铁匠",
+		"点击铁匠后应打开兵刃淬炼界面"
+	)
+	main_scene.call("_close_active_window")
 	var initial_enemies: Array = main_scene.get("enemies")
 	for enemy in initial_enemies:
 		enemy.queue_free()
