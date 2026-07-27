@@ -104,5 +104,6 @@ Windows 安装包通过 `installer/luodong-legendary.iss` 使用 Inno Setup 6 �
 - [剧情与产品方向](docs/PRODUCT_DIRECTION.md)
 - [技术架构](docs/ARCHITECTURE.md)
 - [开发说明](docs/DEVELOPMENT.md)
+- [手绘等轴测 2.5D 美术规范](docs/ISOMETRIC_2D_ART_SPEC.md)
 - [等距 3D 技术移植记录](docs/ISOMETRIC_3D_PORT.md)
 - [东亚建筑资产移植记录](docs/EAST_ASIAN_ASSET_PORT.md)

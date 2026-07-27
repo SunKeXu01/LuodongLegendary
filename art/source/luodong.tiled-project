@@ -1,0 +1,49 @@
+{
+    "automappingRulesFile": "",
+    "commands": [],
+    "compatibilityVersion": 1100,
+    "extensionsPath": "extensions",
+    "folders": [
+        "."
+    ],
+    "objectTypesFile": "",
+    "propertyTypes": [
+        {
+            "color": "#ffe0b050",
+            "drawFill": true,
+            "id": 1,
+            "members": [
+                {
+                    "name": "id",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "kind",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "interaction",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "spawn_group",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "destination",
+                    "type": "string",
+                    "value": ""
+                }
+            ],
+            "name": "江湖对象",
+            "type": "class",
+            "useAs": [
+                "object"
+            ]
+        }
+    ]
+}
