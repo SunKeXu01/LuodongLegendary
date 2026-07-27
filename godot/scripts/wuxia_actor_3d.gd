@@ -23,27 +23,46 @@ var nameplate: Label3D
 var weapon_pivot: Node3D
 var model_root: Node3D
 var walk_phase := 0.0
+var navigation_agent: NavigationAgent3D
+var patrol_origin := Vector3.ZERO
+var patrol_radius := 0.0
+var patrol_wait := 0.0
+var patrol_phase := 0.0
+var animation_state := "idle"
 
 
 func _ready() -> void:
 	health = max_health
 	_create_collision()
+	_create_navigation_agent()
 	_create_model()
 	_create_nameplate()
 
 
 func command_move(target: Vector3) -> void:
 	destination = Vector3(target.x, 0.0, target.z)
+	navigation_agent.target_position = destination
 	moving = true
+	animation_state = "run"
 
 
 func stop() -> void:
 	moving = false
 	velocity = Vector3.ZERO
+	if animation_state == "run":
+		animation_state = "idle"
+
+
+func enable_patrol(origin: Vector3, radius: float, phase: float) -> void:
+	patrol_origin = origin
+	patrol_radius = radius
+	patrol_phase = phase
+	patrol_wait = 0.8 + phase * 0.25
 
 
 func take_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
+	animation_state = "hit" if health > 0 else "defeated"
 	_refresh_nameplate()
 	_hit_flash()
 	if health == 0:
@@ -53,21 +72,42 @@ func take_damage(amount: int) -> void:
 func play_attack() -> void:
 	if not is_instance_valid(weapon_pivot):
 		return
+	animation_state = "attack"
 	var tween := create_tween()
 	tween.tween_property(weapon_pivot, "rotation_degrees:z", -72.0, 0.12)
 	tween.tween_property(weapon_pivot, "rotation_degrees:z", 18.0, 0.2)
+	tween.tween_callback(_finish_action_animation)
+
+
+func play_defeat() -> void:
+	stop()
+	animation_state = "defeated"
+	if is_instance_valid(nameplate):
+		nameplate.visible = false
+	if is_instance_valid(selection_disc):
+		selection_disc.visible = false
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(model_root, "rotation_degrees:z", 82.0, 0.36)
+	tween.tween_property(model_root, "position:y", -0.3, 0.42)
+	tween.tween_property(model_root, "scale", Vector3(1.0, 0.72, 1.0), 0.42)
 
 
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	_update_patrol(delta)
 	if not moving:
 		velocity = Vector3.ZERO
 		_set_walk_bob(0.0)
 		return
-	var offset := destination - global_position
+	if navigation_agent.is_navigation_finished():
+		stop()
+		_set_walk_bob(0.0)
+		return
+	var next_path_position := navigation_agent.get_next_path_position()
+	var offset := next_path_position - global_position
 	offset.y = 0.0
-	if offset.length() <= 0.18:
-		global_position = Vector3(destination.x, global_position.y, destination.z)
+	if global_position.distance_to(destination) <= 0.22:
 		stop()
 		_set_walk_bob(0.0)
 		return
@@ -79,6 +119,20 @@ func _physics_process(delta: float) -> void:
 	_set_walk_bob(sin(walk_phase) * 0.055)
 
 
+func _update_patrol(delta: float) -> void:
+	if not hostile or patrol_radius <= 0.0 or is_instance_valid(combat_target):
+		return
+	if moving or animation_state == "defeated":
+		return
+	patrol_wait -= delta
+	if patrol_wait > 0.0:
+		return
+	patrol_phase += 1.37
+	var offset := Vector3(cos(patrol_phase), 0.0, sin(patrol_phase)) * patrol_radius
+	command_move(patrol_origin + offset)
+	patrol_wait = 1.5
+
+
 func _create_collision() -> void:
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -87,6 +141,16 @@ func _create_collision() -> void:
 	collision.shape = shape
 	collision.position.y = 0.78
 	add_child(collision)
+
+
+func _create_navigation_agent() -> void:
+	navigation_agent = NavigationAgent3D.new()
+	navigation_agent.path_desired_distance = 0.18
+	navigation_agent.target_desired_distance = 0.22
+	navigation_agent.radius = 0.34
+	navigation_agent.height = 1.6
+	navigation_agent.max_speed = move_speed
+	add_child(navigation_agent)
 
 
 func _create_model() -> void:
@@ -154,6 +218,13 @@ func _hit_flash() -> void:
 	var tween := create_tween()
 	tween.tween_property(model_root, "scale", Vector3(1.08, 0.94, 1.08), 0.06)
 	tween.tween_property(model_root, "scale", Vector3.ONE, 0.11)
+	tween.tween_callback(_finish_action_animation)
+
+
+func _finish_action_animation() -> void:
+	if animation_state == "defeated":
+		return
+	animation_state = "run" if moving else "idle"
 
 
 func _set_walk_bob(value: float) -> void:

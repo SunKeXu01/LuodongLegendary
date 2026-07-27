@@ -32,10 +32,13 @@ Godot 4.7.1
   ├─ CloudFordWorld3D
   │   ├─ SubViewport 实时 3D 世界
   │   ├─ 斜视角平滑镜头跟随
-  │   └─ 屏幕坐标与世界坐标转换
+  │   ├─ 屏幕坐标与世界坐标转换
+  │   ├─ NavigationMesh 建筑绕障区域
+  │   └─ CombatVfx3D 技能与移动反馈
   ├─ WuxiaActor3D
   │   ├─ CharacterBody3D 玩家与敌人
-  │   ├─ 3D 移动、转向与碰撞
+  │   ├─ NavigationAgent3D 路径移动
+  │   ├─ 巡逻、警戒、追击和脱战
   │   └─ 名牌、选中环、攻击和受击表现
   └─ GameState
       ├─ 气血、碎银与武学状态

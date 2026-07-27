@@ -6,6 +6,7 @@ var world_root: Node3D
 var camera: Camera3D
 var follow_target: Node3D
 var camera_offset := Vector3(0.0, 15.5, 18.5)
+var combat_vfx: CombatVfx3D
 
 
 func _ready() -> void:
@@ -19,6 +20,7 @@ func _ready() -> void:
 	_create_landscape()
 	_create_settlement()
 	_create_nature()
+	_create_navigation()
 
 
 func _create_viewport() -> void:
@@ -30,6 +32,9 @@ func _create_viewport() -> void:
 
 	world_root = Node3D.new()
 	world_viewport.add_child(world_root)
+	combat_vfx = CombatVfx3D.new()
+	combat_vfx.name = "战斗特效"
+	world_root.add_child(combat_vfx)
 
 	camera = Camera3D.new()
 	camera.position = Vector3(0.0, 15.5, 18.5)
@@ -67,6 +72,72 @@ func screen_to_ground(screen_position: Vector2) -> Vector3:
 
 func world_to_screen(world_position: Vector3) -> Vector2:
 	return camera.unproject_position(world_position)
+
+
+func play_skill_effect(skill_name: String, source: Vector3, target: Vector3) -> void:
+	combat_vfx.play_skill(skill_name, source, target)
+
+
+func show_move_marker(at: Vector3) -> void:
+	combat_vfx.play_move_marker(at)
+
+
+func _create_navigation() -> void:
+	var navigation_region := NavigationRegion3D.new()
+	navigation_region.name = "云津渡导航区域"
+	var navigation_mesh := NavigationMesh.new()
+	navigation_mesh.agent_radius = 0.34
+	navigation_mesh.agent_height = 1.6
+
+	var minimum := Vector2(-11.5, -8.2)
+	var maximum := Vector2(4.8, 7.2)
+	var columns := 30
+	var rows := 28
+	var step := Vector2(
+		(maximum.x - minimum.x) / float(columns),
+		(maximum.y - minimum.y) / float(rows)
+	)
+	var vertices := PackedVector3Array()
+	for row in range(rows + 1):
+		for column in range(columns + 1):
+			vertices.append(Vector3(
+				minimum.x + column * step.x,
+				0.08,
+				minimum.y + row * step.y
+			))
+	navigation_mesh.vertices = vertices
+
+	for row in range(rows):
+		for column in range(columns):
+			var center := Vector2(
+				minimum.x + (column + 0.5) * step.x,
+				minimum.y + (row + 0.5) * step.y
+			)
+			if _navigation_cell_blocked(center):
+				continue
+			var top_left := row * (columns + 1) + column
+			var bottom_left := (row + 1) * (columns + 1) + column
+			var bottom_right := bottom_left + 1
+			var top_right := top_left + 1
+			navigation_mesh.add_polygon(PackedInt32Array([
+				top_left, bottom_left, bottom_right, top_right
+			]))
+
+	navigation_region.navigation_mesh = navigation_mesh
+	world_root.add_child(navigation_region)
+
+
+func _navigation_cell_blocked(point: Vector2) -> bool:
+	var building_areas := [
+		Rect2(-10.95, -7.6, 4.9, 3.8),
+		Rect2(-5.45, -7.85, 4.7, 3.5),
+		Rect2(0.55, -7.75, 5.3, 3.9),
+		Rect2(-11.5, 3.0, 4.45, 3.8),
+	]
+	for area in building_areas:
+		if area.has_point(point):
+			return true
+	return false
 
 
 func _create_environment() -> void:

@@ -8,8 +8,6 @@ var player: WuxiaActor3D
 var enemies: Array[WuxiaActor3D] = []
 var selected_enemy: WuxiaActor3D
 var world: CloudFordWorld3D
-var move_marker := Vector3.ZERO
-var marker_time := 0.0
 var retarget_time := 0.0
 var enemy_attack_time := 0.0
 var health_bar: ProgressBar
@@ -72,6 +70,7 @@ func _create_enemies() -> void:
 		enemy.move_speed = 3.2
 		enemy.defeated.connect(_on_enemy_defeated)
 		world.add_actor(enemy)
+		enemy.enable_patrol(enemy.position, 1.25, float(enemies.size() + 1))
 		enemies.append(enemy)
 
 
@@ -96,17 +95,17 @@ func _unhandled_input(event: InputEvent) -> void:
 func _command_player(click: Vector2) -> void:
 	var destination := world.screen_to_ground(click)
 	player.command_move(destination)
-	move_marker = destination
-	marker_time = 0.65
+	world.show_move_marker(destination)
 	GameState.set_message("正在前往指定位置。点击敌人可自动追击。")
-	queue_redraw()
 
 
 func _select_enemy(enemy: WuxiaActor3D) -> void:
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
+		selected_enemy.combat_target = null
 	selected_enemy = enemy
 	selected_enemy.selected = true
+	selected_enemy.combat_target = player
 	player.combat_target = enemy
 	retarget_time = 0.0
 	target_label.text = "目标｜%s  %d/%d" % [enemy.display_name, enemy.health, enemy.max_health]
@@ -120,6 +119,7 @@ func _select_enemy(enemy: WuxiaActor3D) -> void:
 func _clear_target() -> void:
 	if is_instance_valid(selected_enemy):
 		selected_enemy.selected = false
+		selected_enemy.combat_target = null
 	selected_enemy = null
 	player.combat_target = null
 	target_label.text = "目标｜尚未选中"
@@ -127,7 +127,6 @@ func _clear_target() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	marker_time = maxf(0.0, marker_time - delta)
 	retarget_time = maxf(0.0, retarget_time - delta)
 	enemy_attack_time = maxf(0.0, enemy_attack_time - delta)
 	heal_cooldown = maxf(0.0, heal_cooldown - delta)
@@ -135,8 +134,6 @@ func _physics_process(delta: float) -> void:
 		qinggong_time = maxf(0.0, qinggong_time - delta)
 		if qinggong_time <= 0.0:
 			player.move_speed = 5.0
-	if marker_time > 0.0:
-		queue_redraw()
 	_update_player_combat()
 	_update_enemy_combat()
 
@@ -161,22 +158,27 @@ func _update_player_combat() -> void:
 		return
 	player.attack_cooldown = 0.72
 	player.play_attack()
+	world.play_skill_effect(
+		GameState.selected_skill, player.global_position, selected_enemy.global_position
+	)
 	var damage := 22
 	if GameState.selected_skill == "伏虎掌":
 		damage = 28
 	elif GameState.selected_skill == "机弩术":
 		damage = 18
-	selected_enemy.take_damage(damage)
+	var target := selected_enemy
+	target.take_damage(damage)
 	_show_damage(
-		selected_enemy.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
+		target.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
 	)
-	target_label.text = "目标｜%s  %d/%d" % [
-		selected_enemy.display_name, selected_enemy.health, selected_enemy.max_health
-	]
-	target_health_bar.value = selected_enemy.health
-	GameState.set_message("%s命中%s，造成 %d 点伤害。" % [
-		GameState.selected_skill, selected_enemy.display_name, damage
-	])
+	if target.health > 0:
+		target_label.text = "目标｜%s  %d/%d" % [
+			target.display_name, target.health, target.max_health
+		]
+		target_health_bar.value = target.health
+		GameState.set_message("%s命中%s，造成 %d 点伤害。" % [
+			GameState.selected_skill, target.display_name, damage
+		])
 
 
 func _update_enemy_combat() -> void:
@@ -186,9 +188,23 @@ func _update_enemy_combat() -> void:
 		if not is_instance_valid(enemy):
 			continue
 		var distance := enemy.global_position.distance_to(player.global_position)
+		var distance_from_home := enemy.global_position.distance_to(enemy.patrol_origin)
+		if enemy != selected_enemy and distance_from_home > 6.5:
+			enemy.combat_target = null
+			if not enemy.moving:
+				enemy.command_move(enemy.patrol_origin)
+			continue
+		if enemy == selected_enemy or distance < 4.2:
+			enemy.combat_target = player
+		elif enemy.combat_target == player and distance > 6.0:
+			enemy.combat_target = null
+		if enemy.combat_target != player:
+			continue
 		if distance < 1.15:
 			enemy_attack_time = 1.05
+			enemy.stop()
 			enemy.play_attack()
+			world.play_skill_effect("敌人反击", enemy.global_position, player.global_position)
 			GameState.damage_player(8)
 			_show_damage(player.global_position + Vector3(0, 1.8, 0), 8, Color("#ff776d"))
 			if GameState.player_health == 0:
@@ -197,7 +213,7 @@ func _update_enemy_combat() -> void:
 			else:
 				GameState.set_message("%s发动反击，少侠损失 8 点气血。" % enemy.display_name)
 			return
-		if distance < 5.5 and selected_enemy == enemy:
+		if not enemy.moving or enemy.destination.distance_to(player.global_position) > 0.8:
 			var pursuit := (
 				player.global_position
 				+ player.global_position.direction_to(enemy.global_position) * 0.9
@@ -211,7 +227,8 @@ func _on_enemy_defeated(enemy: WuxiaActor3D) -> void:
 		selected_enemy = null
 		player.combat_target = null
 	enemies.erase(enemy)
-	enemy.queue_free()
+	enemy.play_defeat()
+	get_tree().create_timer(0.55).timeout.connect(enemy.queue_free)
 	GameState.add_silver(12)
 	GameState.set_message("击败%s，获得碎银 12 两。" % name)
 	target_label.text = "目标｜尚未选中"
@@ -238,15 +255,6 @@ func _show_damage(at: Vector3, amount: int, color: Color) -> void:
 	tween.tween_property(label, "modulate:a", 0.0, 0.65)
 	tween.set_parallel(false)
 	tween.tween_callback(label.queue_free)
-
-
-func _draw() -> void:
-	if marker_time <= 0.0:
-		return
-	var alpha := marker_time / 0.65
-	var marker_screen := world.world_to_screen(move_marker)
-	draw_arc(marker_screen, 13.0, 0.0, TAU, 32, Color(0.92, 0.76, 0.34, alpha), 2.0)
-	draw_circle(marker_screen, 3.0, Color(1.0, 0.9, 0.55, alpha))
 
 
 func _create_hud() -> void:
