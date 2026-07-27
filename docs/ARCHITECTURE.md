@@ -32,11 +32,15 @@ Godot 4.7.1
   ├─ CloudFordWorld3D
   │   ├─ SubViewport 实时 3D 世界
   │   ├─ 斜视角平滑镜头跟随
+  │   ├─ 可保存昼夜、薄雾细雨与夜间灯笼
+  │   ├─ 建筑遮挡渐隐与战斗镜头震动
   │   ├─ 屏幕坐标与世界坐标转换
   │   ├─ NavigationMesh 建筑绕障区域
   │   └─ CombatVfx3D 技能与移动反馈
   ├─ WuxiaActor3D
   │   ├─ CharacterBody3D 玩家与敌人
+  │   ├─ 程序化低多边形有关节角色
+  │   ├─ AnimationTree 待机、跑动、攻击、受击与倒地状态
   │   ├─ NavigationAgent3D 路径移动
   │   ├─ 巡逻、警戒、追击和脱战
   │   └─ 名牌、选中环、攻击和受击表现

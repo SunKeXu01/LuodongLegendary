@@ -32,6 +32,7 @@ var heal_cooldown := 0.0
 var hud_layer: CanvasLayer
 var active_window: Panel
 var restored_world: Dictionary = {}
+var environment_label: Label
 
 
 func _ready() -> void:
@@ -104,6 +105,7 @@ func _create_quest_npc() -> void:
 func _apply_world_snapshot() -> void:
 	if restored_world.is_empty():
 		return
+	world.set_world_time(float(restored_world.get("world_time", world.get_world_time())))
 	var player_position = restored_world.get("player_position", [])
 	if player_position is Array and player_position.size() == 3:
 		player.global_position = _array_to_vector(player_position)
@@ -161,6 +163,7 @@ func _world_snapshot() -> Dictionary:
 		"player_position": _vector_to_array(player.global_position),
 		"enemies": enemy_data,
 		"loot": loot_data,
+		"world_time": world.get_world_time(),
 	}
 
 
@@ -261,6 +264,10 @@ func _physics_process(delta: float) -> void:
 	_update_pending_interactions()
 	_update_player_combat()
 	_update_enemy_combat()
+	if is_instance_valid(environment_label):
+		environment_label.text = "%s · %s" % [
+			world.get_time_label(), world.get_weather_label()
+		]
 
 
 func _command_collect_loot(loot: LootPickup3D) -> void:
@@ -338,6 +345,7 @@ func _update_player_combat() -> void:
 	var target := selected_enemy
 	target.take_damage(damage)
 	AudioManager.play_hit()
+	world.shake_camera(0.11)
 	_show_damage(
 		target.global_position + Vector3(0, 1.8, 0), damage, Color("#ffe49a")
 	)
@@ -377,7 +385,9 @@ func _update_enemy_combat() -> void:
 			world.play_skill_effect("敌人反击", enemy.global_position, player.global_position)
 			var enemy_damage := maxi(1, 12 - GameState.get_defense())
 			GameState.damage_player(enemy_damage)
+			player.play_hit()
 			AudioManager.play_hit()
+			world.shake_camera(0.23)
 			_show_damage(
 				player.global_position + Vector3(0, 1.8, 0),
 				enemy_damage,
@@ -519,6 +529,9 @@ func _create_hud() -> void:
 	minimap.configure(player, enemies)
 	hud.add_child(minimap)
 	_add_label(minimap, "云津渡", Vector2(57, 160), Vector2(78, 23), 14, Color("#f0d993"), true)
+	environment_label = _add_label(
+		minimap, "", Vector2(35, 137), Vector2(120, 20), 11, Color("#c7d8cf"), true
+	)
 
 	var quest := _panel(Vector2(958, 218), Vector2(302, 148), Color(0.025, 0.04, 0.035, 0.91))
 	hud.add_child(quest)

@@ -6,8 +6,8 @@
 
 - `godot/scenes/main.tscn`：Godot 正式客户端入口。
 - `godot/scripts/main.gd`：鼠标指令、自动追击战斗和网游式 HUD。
-- `godot/scripts/wuxia_actor_3d.gd`：玩家和敌人的 3D 实体、移动、碰撞与战斗表现。
-- `godot/scripts/cloud_ford_world_3d.gd`：云津渡实时 3D 场景、镜头跟随与鼠标射线换算。
+- `godot/scripts/wuxia_actor_3d.gd`：有关节的低多边形武侠角色、动画状态机、移动与战斗。
+- `godot/scripts/cloud_ford_world_3d.gd`：云津渡实时 3D 场景、昼夜细雨、遮挡渐隐、镜头反馈与鼠标射线换算。
 - `godot/scripts/game_state.gd`：属性、背包、装备、任务、存档与设置状态。
 - `godot/scripts/audio_manager.gd`：UI、战斗、拾取和任务反馈音效。
 - `installer/luodong-legendary.iss`：可自选安装目录的压缩安装包定义。

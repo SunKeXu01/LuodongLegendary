@@ -1,6 +1,8 @@
 node_modules/
 .godot/
 godot/.godot/
+godot/**/*.uid
+godot/**/*.import
 coverage/
 dist/
 release/

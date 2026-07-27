@@ -7,6 +7,15 @@ var camera: Camera3D
 var follow_target: Node3D
 var camera_offset := Vector3(0.0, 15.5, 18.5)
 var combat_vfx: CombatVfx3D
+var environment: Environment
+var sunlight: DirectionalLight3D
+var world_time := 0.31
+var time_scale := 1.0 / 240.0
+var lantern_lights: Array[OmniLight3D] = []
+var occluder_groups: Array[Dictionary] = []
+var rain: GPUParticles3D
+var camera_shake := 0.0
+var camera_shake_phase := 0.0
 
 
 func _ready() -> void:
@@ -20,6 +29,7 @@ func _ready() -> void:
 	_create_landscape()
 	_create_settlement()
 	_create_nature()
+	_create_rain()
 	_create_navigation()
 
 
@@ -44,12 +54,25 @@ func _create_viewport() -> void:
 
 
 func _process(delta: float) -> void:
+	world_time = fposmod(world_time + delta * time_scale, 1.0)
+	_update_environment()
 	if not is_instance_valid(follow_target) or not is_instance_valid(camera):
 		return
 	var focus := follow_target.global_position + Vector3(0.0, 0.0, -1.6)
 	var desired := focus + camera_offset
+	if camera_shake > 0.001:
+		camera_shake_phase += delta * 38.0
+		desired += Vector3(
+			sin(camera_shake_phase * 1.7),
+			cos(camera_shake_phase * 2.3),
+			sin(camera_shake_phase * 2.9)
+		) * camera_shake
+		camera_shake = move_toward(camera_shake, 0.0, delta * 1.35)
 	camera.global_position = camera.global_position.lerp(desired, minf(1.0, delta * 2.8))
 	camera.look_at(focus, Vector3.UP)
+	if is_instance_valid(rain):
+		rain.global_position = focus + Vector3(0, 8, 0)
+	_update_occluders(delta)
 
 
 func add_actor(actor: Node3D) -> void:
@@ -58,6 +81,46 @@ func add_actor(actor: Node3D) -> void:
 
 func set_follow_target(actor: Node3D) -> void:
 	follow_target = actor
+
+
+func shake_camera(intensity: float) -> void:
+	camera_shake = maxf(camera_shake, intensity)
+
+
+func set_world_time(value: float) -> void:
+	world_time = fposmod(value, 1.0)
+	_update_environment()
+
+
+func get_world_time() -> float:
+	return world_time
+
+
+func get_time_label() -> String:
+	var hour := int(world_time * 24.0) % 24
+	if hour < 5:
+		return "寅时"
+	if hour < 7:
+		return "卯时"
+	if hour < 9:
+		return "辰时"
+	if hour < 11:
+		return "巳时"
+	if hour < 13:
+		return "午时"
+	if hour < 15:
+		return "未时"
+	if hour < 17:
+		return "申时"
+	if hour < 19:
+		return "酉时"
+	if hour < 21:
+		return "戌时"
+	return "亥时"
+
+
+func get_weather_label() -> String:
+	return "薄雾细雨"
 
 
 func screen_to_ground(screen_position: Vector2) -> Vector3:
@@ -142,7 +205,7 @@ func _navigation_cell_blocked(point: Vector2) -> bool:
 
 func _create_environment() -> void:
 	var world_environment := WorldEnvironment.new()
-	var environment := Environment.new()
+	environment = Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("#9aab98")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -156,12 +219,42 @@ func _create_environment() -> void:
 	world_environment.environment = environment
 	world_root.add_child(world_environment)
 
-	var sunlight := DirectionalLight3D.new()
+	sunlight = DirectionalLight3D.new()
 	sunlight.rotation_degrees = Vector3(-54.0, -32.0, 0.0)
 	sunlight.light_color = Color("#f3d8a3")
 	sunlight.light_energy = 1.25
 	sunlight.shadow_enabled = true
 	world_root.add_child(sunlight)
+	_update_environment()
+
+
+func _update_environment() -> void:
+	if not is_instance_valid(sunlight) or environment == null:
+		return
+	var sun_angle := world_time * TAU - PI * 0.5
+	var daylight := clampf(sin(sun_angle) * 0.65 + 0.55, 0.08, 1.0)
+	var twilight := 1.0 - absf(world_time - 0.73) * 8.0
+	twilight = clampf(twilight, 0.0, 1.0)
+	sunlight.rotation_degrees = Vector3(
+		-12.0 - daylight * 62.0,
+		world_time * 360.0 - 90.0,
+		0.0
+	)
+	sunlight.light_energy = 0.12 + daylight * 1.25
+	sunlight.light_color = Color("#f2c27f").lerp(Color("#fff0ca"), daylight)
+	environment.background_color = Color("#182735").lerp(Color("#91a899"), daylight)
+	environment.ambient_light_color = Color("#344a5c").lerp(
+		Color("#d7d1b8"), daylight
+	)
+	environment.ambient_light_energy = 0.34 + daylight * 0.42
+	environment.fog_light_color = Color("#465c66").lerp(
+		Color("#aeb8a4"), daylight
+	)
+	environment.fog_density = 0.026 - daylight * 0.009 + twilight * 0.006
+	var lantern_energy := clampf((0.48 - daylight) * 5.0, 0.0, 1.0) * 2.25
+	for lantern in lantern_lights:
+		if is_instance_valid(lantern):
+			lantern.light_energy = lantern_energy
 
 
 func _create_landscape() -> void:
@@ -205,6 +298,14 @@ func _create_settlement() -> void:
 			Vector3(1.4, 1.1, 0.9),
 			Color("#77664b")
 		)
+	var lantern_positions := [
+		Vector3(-2.2, 2.15, -3.4),
+		Vector3(1.0, 2.15, -3.4),
+		Vector3(-6.1, 1.9, 1.7),
+		Vector3(3.5, 1.9, 3.0),
+	]
+	for index in lantern_positions.size():
+		_create_lantern("灯笼%d" % index, lantern_positions[index])
 
 
 func _create_nature() -> void:
@@ -221,19 +322,89 @@ func _create_nature() -> void:
 
 
 func _house(at: Vector3, dimensions: Vector3, wall_color: Color) -> void:
-	_box("屋身", at + Vector3(0, dimensions.y * 0.5, 0), dimensions, wall_color)
-	_box(
+	var body := _box(
+		"屋身", at + Vector3(0, dimensions.y * 0.5, 0), dimensions, wall_color
+	)
+	var roof := _box(
 		"屋顶",
 		at + Vector3(0, dimensions.y + 0.35, 0),
 		Vector3(dimensions.x + 0.7, 0.42, dimensions.z + 0.75),
 		Color("#293b36")
 	)
-	_box(
+	var door := _box(
 		"门",
 		at + Vector3(0, 0.85, dimensions.z * 0.505),
 		Vector3(0.75, 1.7, 0.08),
 		Color("#4b3026")
 	)
+	occluder_groups.append({
+		"center": at,
+		"size": Vector2(dimensions.x + 1.1, dimensions.z + 1.1),
+		"meshes": [body, roof, door],
+	})
+
+
+func _update_occluders(delta: float) -> void:
+	if not is_instance_valid(follow_target):
+		return
+	var player_xz := Vector2(follow_target.global_position.x, follow_target.global_position.z)
+	for group in occluder_groups:
+		var center: Vector3 = group["center"]
+		var dimensions: Vector2 = group["size"]
+		var area := Rect2(
+			Vector2(center.x, center.z) - dimensions * 0.5,
+			dimensions
+		)
+		var should_fade := area.grow(0.8).has_point(player_xz)
+		var target_alpha := 0.58 if should_fade else 0.0
+		for mesh in group["meshes"]:
+			if is_instance_valid(mesh):
+				mesh.transparency = move_toward(
+					mesh.transparency, target_alpha, delta * 2.8
+				)
+
+
+func _create_lantern(node_name: String, at: Vector3) -> void:
+	var lantern := _box(node_name, at, Vector3(0.22, 0.34, 0.22), Color("#b6412f"))
+	var material := lantern.mesh.material as StandardMaterial3D
+	material.emission_enabled = true
+	material.emission = Color("#ff9b45")
+	material.emission_energy_multiplier = 1.8
+	var light := OmniLight3D.new()
+	light.name = "%s光源" % node_name
+	light.position = at
+	light.light_color = Color("#ffb45e")
+	light.omni_range = 4.2
+	light.shadow_enabled = false
+	world_root.add_child(light)
+	lantern_lights.append(light)
+
+
+func _create_rain() -> void:
+	rain = GPUParticles3D.new()
+	rain.name = "薄雾细雨"
+	rain.amount = 320
+	rain.lifetime = 1.8
+	rain.randomness = 0.35
+	rain.visibility_aabb = AABB(Vector3(-12, -10, -12), Vector3(24, 20, 24))
+	var particles := ParticleProcessMaterial.new()
+	particles.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	particles.emission_box_extents = Vector3(11, 0.5, 9)
+	particles.direction = Vector3(-0.12, -1.0, 0.05)
+	particles.spread = 5.0
+	particles.initial_velocity_min = 8.0
+	particles.initial_velocity_max = 11.0
+	particles.gravity = Vector3(0, -3.0, 0)
+	rain.process_material = particles
+	var drop := BoxMesh.new()
+	drop.size = Vector3(0.018, 0.42, 0.018)
+	var drop_material := StandardMaterial3D.new()
+	drop_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	drop_material.albedo_color = Color(0.72, 0.84, 0.88, 0.42)
+	drop_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	drop.material = drop_material
+	rain.draw_pass_1 = drop
+	world_root.add_child(rain)
 
 
 func _box(

@@ -22,7 +22,13 @@ var selection_disc: MeshInstance3D
 var nameplate: Label3D
 var weapon_pivot: Node3D
 var model_root: Node3D
-var walk_phase := 0.0
+var left_leg: Node3D
+var right_leg: Node3D
+var left_arm: Node3D
+var right_arm: Node3D
+var animation_player: AnimationPlayer
+var animation_tree: AnimationTree
+var animation_playback: AnimationNodeStateMachinePlayback
 var navigation_agent: NavigationAgent3D
 var patrol_origin := Vector3.ZERO
 var patrol_radius := 0.0
@@ -36,6 +42,7 @@ func _ready() -> void:
 	_create_collision()
 	_create_navigation_agent()
 	_create_model()
+	_create_animation_state_machine()
 	_create_nameplate()
 
 
@@ -43,14 +50,14 @@ func command_move(target: Vector3) -> void:
 	destination = Vector3(target.x, 0.0, target.z)
 	navigation_agent.target_position = destination
 	moving = true
-	animation_state = "run"
+	_set_animation_state("run")
 
 
 func stop() -> void:
 	moving = false
 	velocity = Vector3.ZERO
 	if animation_state == "run":
-		animation_state = "idle"
+		_set_animation_state("idle")
 
 
 func enable_patrol(origin: Vector3, radius: float, phase: float) -> void:
@@ -62,7 +69,10 @@ func enable_patrol(origin: Vector3, radius: float, phase: float) -> void:
 
 func take_damage(amount: int) -> void:
 	health = maxi(0, health - amount)
-	animation_state = "hit" if health > 0 else "defeated"
+	if health > 0:
+		play_hit()
+	else:
+		_set_animation_state("defeated")
 	_refresh_nameplate()
 	_hit_flash()
 	if health == 0:
@@ -75,27 +85,22 @@ func restore_health(value: int) -> void:
 
 
 func play_attack() -> void:
-	if not is_instance_valid(weapon_pivot):
-		return
-	animation_state = "attack"
-	var tween := create_tween()
-	tween.tween_property(weapon_pivot, "rotation_degrees:z", -72.0, 0.12)
-	tween.tween_property(weapon_pivot, "rotation_degrees:z", 18.0, 0.2)
-	tween.tween_callback(_finish_action_animation)
+	_set_animation_state("attack")
+	get_tree().create_timer(0.4).timeout.connect(_finish_action_animation)
+
+
+func play_hit() -> void:
+	_set_animation_state("hit")
+	get_tree().create_timer(0.22).timeout.connect(_finish_action_animation)
 
 
 func play_defeat() -> void:
 	stop()
-	animation_state = "defeated"
+	_set_animation_state("defeated")
 	if is_instance_valid(nameplate):
 		nameplate.visible = false
 	if is_instance_valid(selection_disc):
 		selection_disc.visible = false
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(model_root, "rotation_degrees:z", 82.0, 0.36)
-	tween.tween_property(model_root, "position:y", -0.3, 0.42)
-	tween.tween_property(model_root, "scale", Vector3(1.0, 0.72, 1.0), 0.42)
 
 
 func _physics_process(delta: float) -> void:
@@ -103,25 +108,20 @@ func _physics_process(delta: float) -> void:
 	_update_patrol(delta)
 	if not moving:
 		velocity = Vector3.ZERO
-		_set_walk_bob(0.0)
 		return
 	if navigation_agent.is_navigation_finished():
 		stop()
-		_set_walk_bob(0.0)
 		return
 	var next_path_position := navigation_agent.get_next_path_position()
 	var offset := next_path_position - global_position
 	offset.y = 0.0
 	if global_position.distance_to(destination) <= 0.22:
 		stop()
-		_set_walk_bob(0.0)
 		return
 	var direction := offset.normalized()
 	velocity = direction * move_speed
 	rotation.y = lerp_angle(rotation.y, atan2(direction.x, direction.z), delta * 12.0)
 	move_and_slide()
-	walk_phase += delta * 10.0
-	_set_walk_bob(sin(walk_phase) * 0.055)
 
 
 func _update_patrol(delta: float) -> void:
@@ -160,22 +160,42 @@ func _create_navigation_agent() -> void:
 
 func _create_model() -> void:
 	model_root = Node3D.new()
-	model_root.name = "武侠角色模型"
+	model_root.name = "CharacterModel"
 	add_child(model_root)
 
 	var robe_color := Color("#31584b") if not hostile else Color("#643238")
+	var robe_dark := Color("#203d35") if not hostile else Color("#452329")
 	var robe_trim := Color("#d5bd75") if not hostile else Color("#c78d58")
-	_add_cylinder(model_root, Vector3(0, 0.72, 0), 0.34, 0.46, 1.1, robe_color)
-	_add_sphere(model_root, Vector3(0, 1.48, 0), 0.24, Color("#d2a378"))
-	_add_box(model_root, Vector3(0, 1.68, 0), Vector3(0.48, 0.12, 0.42), Color("#202321"))
-	_add_box(model_root, Vector3(0, 0.92, 0.29), Vector3(0.52, 0.07, 0.05), robe_trim)
+	_add_cylinder(model_root, Vector3(0, 0.9, 0), 0.3, 0.44, 0.92, robe_color)
+	_add_box(model_root, Vector3(0, 1.1, 0.02), Vector3(0.58, 0.4, 0.34), robe_color)
+	_add_box(model_root, Vector3(0, 0.91, 0.2), Vector3(0.62, 0.07, 0.05), robe_trim)
+	_add_sphere(model_root, Vector3(0, 1.57, 0), 0.23, Color("#d2a378"))
+	_add_box(model_root, Vector3(0, 1.76, 0), Vector3(0.48, 0.12, 0.42), Color("#202321"))
+	_add_box(model_root, Vector3(0, 1.82, -0.08), Vector3(0.12, 0.28, 0.12), Color("#202321"))
+
+	left_leg = _limb_pivot("LeftLeg", Vector3(-0.19, 0.48, 0), model_root)
+	right_leg = _limb_pivot("RightLeg", Vector3(0.19, 0.48, 0), model_root)
+	_add_box(left_leg, Vector3(0, -0.25, 0), Vector3(0.19, 0.55, 0.22), robe_dark)
+	_add_box(right_leg, Vector3(0, -0.25, 0), Vector3(0.19, 0.55, 0.22), robe_dark)
+	_add_box(left_leg, Vector3(0, -0.54, 0.07), Vector3(0.2, 0.12, 0.35), Color("#242722"))
+	_add_box(right_leg, Vector3(0, -0.54, 0.07), Vector3(0.2, 0.12, 0.35), Color("#242722"))
+
+	left_arm = _limb_pivot("LeftArm", Vector3(-0.39, 1.27, 0), model_root)
+	right_arm = _limb_pivot("RightArm", Vector3(0.39, 1.27, 0), model_root)
+	left_arm.rotation_degrees.z = -8.0
+	right_arm.rotation_degrees.z = 8.0
+	_add_box(left_arm, Vector3(0, -0.29, 0), Vector3(0.17, 0.62, 0.19), robe_color)
+	_add_box(right_arm, Vector3(0, -0.29, 0), Vector3(0.17, 0.62, 0.19), robe_color)
+	_add_sphere(left_arm, Vector3(0, -0.62, 0), 0.09, Color("#d2a378"))
+	_add_sphere(right_arm, Vector3(0, -0.62, 0), 0.09, Color("#d2a378"))
 
 	weapon_pivot = Node3D.new()
-	weapon_pivot.position = Vector3(0.35, 1.0, 0.0)
-	weapon_pivot.rotation_degrees.z = 18.0
-	model_root.add_child(weapon_pivot)
-	_add_box(weapon_pivot, Vector3(0, 0.3, 0), Vector3(0.07, 0.85, 0.07), Color("#d9d4b9"))
-	_add_box(weapon_pivot, Vector3(0, -0.16, 0), Vector3(0.18, 0.08, 0.1), Color("#745235"))
+	weapon_pivot.name = "WeaponPivot"
+	weapon_pivot.position = Vector3(0, -0.58, 0)
+	weapon_pivot.rotation_degrees.z = 16.0
+	right_arm.add_child(weapon_pivot)
+	_add_box(weapon_pivot, Vector3(0, -0.38, 0), Vector3(0.065, 0.85, 0.065), Color("#d9d4b9"))
+	_add_box(weapon_pivot, Vector3(0, 0.08, 0), Vector3(0.2, 0.07, 0.1), Color("#745235"))
 
 	selection_disc = MeshInstance3D.new()
 	selection_disc.name = "目标选择环"
@@ -192,6 +212,167 @@ func _create_model() -> void:
 	selection_disc.mesh = disc
 	selection_disc.visible = selected
 	add_child(selection_disc)
+
+
+func _create_animation_state_machine() -> void:
+	animation_player = AnimationPlayer.new()
+	animation_player.name = "AnimationPlayer"
+	animation_player.root_node = NodePath("..")
+	add_child(animation_player)
+	var library := AnimationLibrary.new()
+	library.add_animation("idle", _idle_animation())
+	library.add_animation("run", _run_animation())
+	library.add_animation("attack", _attack_animation())
+	library.add_animation("hit", _hit_animation())
+	library.add_animation("defeated", _defeat_animation())
+	animation_player.add_animation_library("", library)
+
+	var state_machine := AnimationNodeStateMachine.new()
+	var names := {
+		"Idle": "idle",
+		"Run": "run",
+		"Attack": "attack",
+		"Hit": "hit",
+		"Defeated": "defeated",
+	}
+	var index := 0
+	for state_name in names:
+		var animation_node := AnimationNodeAnimation.new()
+		animation_node.animation = names[state_name]
+		state_machine.add_node(state_name, animation_node, Vector2(index * 160, 0))
+		index += 1
+	for from_state in names:
+		for to_state in names:
+			if from_state == to_state:
+				continue
+			var transition := AnimationNodeStateMachineTransition.new()
+			transition.xfade_time = 0.08
+			state_machine.add_transition(from_state, to_state, transition)
+
+	animation_tree = AnimationTree.new()
+	animation_tree.name = "AnimationTree"
+	animation_tree.anim_player = NodePath("../AnimationPlayer")
+	animation_tree.tree_root = state_machine
+	add_child(animation_tree)
+	animation_tree.active = true
+	animation_playback = animation_tree.get("parameters/playback")
+	_set_animation_state("idle")
+
+
+func _idle_animation() -> Animation:
+	var animation := Animation.new()
+	animation.length = 1.6
+	animation.loop_mode = Animation.LOOP_LINEAR
+	_add_value_track(
+		animation, "CharacterModel:position",
+		[0.0, 0.8, 1.6],
+		[Vector3.ZERO, Vector3(0, 0.025, 0), Vector3.ZERO]
+	)
+	_add_value_track(
+		animation, "CharacterModel/LeftArm:rotation_degrees",
+		[0.0, 0.8, 1.6],
+		[Vector3(0, 0, -8), Vector3(2, 0, -10), Vector3(0, 0, -8)]
+	)
+	_add_value_track(
+		animation, "CharacterModel/RightArm:rotation_degrees",
+		[0.0, 0.8, 1.6],
+		[Vector3(0, 0, 8), Vector3(-2, 0, 10), Vector3(0, 0, 8)]
+	)
+	return animation
+
+
+func _run_animation() -> Animation:
+	var animation := Animation.new()
+	animation.length = 0.62
+	animation.loop_mode = Animation.LOOP_LINEAR
+	_add_value_track(
+		animation, "CharacterModel:position",
+		[0.0, 0.155, 0.31, 0.465, 0.62],
+		[
+			Vector3.ZERO, Vector3(0, 0.065, 0), Vector3.ZERO,
+			Vector3(0, 0.065, 0), Vector3.ZERO
+		]
+	)
+	_add_value_track(
+		animation, "CharacterModel/LeftLeg:rotation_degrees",
+		[0.0, 0.31, 0.62],
+		[Vector3(30, 0, 0), Vector3(-30, 0, 0), Vector3(30, 0, 0)]
+	)
+	_add_value_track(
+		animation, "CharacterModel/RightLeg:rotation_degrees",
+		[0.0, 0.31, 0.62],
+		[Vector3(-30, 0, 0), Vector3(30, 0, 0), Vector3(-30, 0, 0)]
+	)
+	_add_value_track(
+		animation, "CharacterModel/LeftArm:rotation_degrees",
+		[0.0, 0.31, 0.62],
+		[Vector3(-24, 0, -8), Vector3(24, 0, -8), Vector3(-24, 0, -8)]
+	)
+	_add_value_track(
+		animation, "CharacterModel/RightArm:rotation_degrees",
+		[0.0, 0.31, 0.62],
+		[Vector3(24, 0, 8), Vector3(-24, 0, 8), Vector3(24, 0, 8)]
+	)
+	return animation
+
+
+func _attack_animation() -> Animation:
+	var animation := Animation.new()
+	animation.length = 0.4
+	_add_value_track(
+		animation, "CharacterModel/RightArm:rotation_degrees",
+		[0.0, 0.14, 0.28, 0.4],
+		[
+			Vector3(0, 0, 8), Vector3(-30, 0, 48),
+			Vector3(24, 0, -105), Vector3(0, 0, 8)
+		]
+	)
+	_add_value_track(
+		animation, "CharacterModel:rotation_degrees",
+		[0.0, 0.18, 0.4],
+		[Vector3.ZERO, Vector3(0, -16, 0), Vector3.ZERO]
+	)
+	return animation
+
+
+func _hit_animation() -> Animation:
+	var animation := Animation.new()
+	animation.length = 0.22
+	_add_value_track(
+		animation, "CharacterModel:rotation_degrees",
+		[0.0, 0.08, 0.22],
+		[Vector3.ZERO, Vector3(-12, 0, 7), Vector3.ZERO]
+	)
+	return animation
+
+
+func _defeat_animation() -> Animation:
+	var animation := Animation.new()
+	animation.length = 0.5
+	_add_value_track(
+		animation, "CharacterModel:rotation_degrees",
+		[0.0, 0.5],
+		[Vector3.ZERO, Vector3(0, 0, 82)]
+	)
+	_add_value_track(
+		animation, "CharacterModel:position",
+		[0.0, 0.5],
+		[Vector3.ZERO, Vector3(0, -0.3, 0)]
+	)
+	return animation
+
+
+func _add_value_track(
+	animation: Animation,
+	path: String,
+	times: Array,
+	values: Array
+) -> void:
+	var track := animation.add_track(Animation.TYPE_VALUE)
+	animation.track_set_path(track, NodePath(path))
+	animation.value_track_set_update_mode(track, Animation.UPDATE_CONTINUOUS)
+	for index in range(times.size()):
+		animation.track_insert_key(track, float(times[index]), values[index])
 
 
 func _create_nameplate() -> void:
@@ -223,18 +404,34 @@ func _hit_flash() -> void:
 	var tween := create_tween()
 	tween.tween_property(model_root, "scale", Vector3(1.08, 0.94, 1.08), 0.06)
 	tween.tween_property(model_root, "scale", Vector3.ONE, 0.11)
-	tween.tween_callback(_finish_action_animation)
 
 
 func _finish_action_animation() -> void:
 	if animation_state == "defeated":
 		return
-	animation_state = "run" if moving else "idle"
+	_set_animation_state("run" if moving else "idle")
 
 
-func _set_walk_bob(value: float) -> void:
-	if is_instance_valid(model_root):
-		model_root.position.y = value
+func _set_animation_state(value: String) -> void:
+	animation_state = value
+	if not is_instance_valid(animation_playback):
+		return
+	var state_names := {
+		"idle": "Idle",
+		"run": "Run",
+		"attack": "Attack",
+		"hit": "Hit",
+		"defeated": "Defeated",
+	}
+	animation_playback.travel(state_names.get(value, "Idle"))
+
+
+func _limb_pivot(node_name: String, at: Vector3, parent: Node3D) -> Node3D:
+	var pivot := Node3D.new()
+	pivot.name = node_name
+	pivot.position = at
+	parent.add_child(pivot)
+	return pivot
 
 
 func _add_box(parent: Node3D, at: Vector3, dimensions: Vector3, color: Color) -> void:

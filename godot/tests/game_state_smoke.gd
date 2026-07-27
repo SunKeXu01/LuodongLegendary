@@ -35,6 +35,7 @@ func _ready() -> void:
 		"player_position": [1.0, 0.0, 2.0],
 		"enemies": [],
 		"loot": [{"item_id": "cold_iron", "amount": 1, "position": [2.0, 0.0, 3.0]}],
+		"world_time": 0.72,
 	}
 	_expect(GameState.save_game(snapshot, test_save_path), "游戏状态应能写入存档")
 	GameState.reset()
@@ -42,6 +43,7 @@ func _ready() -> void:
 	_expect(GameState.quest_state == "completed", "读取存档后任务状态应恢复")
 	_expect(GameState.silver == 50, "读取存档后碎银应恢复")
 	_expect(restored.get("loot", []).size() == 1, "读取存档后地面掉落应恢复")
+	_expect(is_equal_approx(float(restored.get("world_time", 0.0)), 0.72), "读取存档后时辰应恢复")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_save_path))
 
 	var test_settings_path := "user://automated_settings_test.json"
