@@ -2,6 +2,8 @@ class_name CloudFordWorld3D
 extends SubViewportContainer
 
 const KAYKIT_MEDIEVAL := "res://assets/vendor/kaykit_medieval/"
+const POLYGONAL_TEMPLE := "res://assets/vendor/polygonal_mind/tomb_chaser_2/"
+const POLYGONAL_LUNAR := "res://assets/vendor/polygonal_mind/lunar_year/"
 
 var world_viewport: SubViewport
 var world_root: Node3D
@@ -217,8 +219,8 @@ func _create_navigation() -> void:
 
 func _navigation_cell_blocked(point: Vector2) -> bool:
 	var building_areas := [
-		Rect2(-10.95, -7.6, 4.9, 3.8),
-		Rect2(-5.45, -7.85, 4.7, 3.5),
+		Rect2(-11.15, -8.1, 5.4, 5.5),
+		Rect2(-5.45, -8.1, 4.7, 4.4),
 		Rect2(0.55, -7.75, 5.3, 3.9),
 		Rect2(-11.5, 3.0, 4.45, 3.8),
 	]
@@ -309,14 +311,8 @@ func _create_landscape() -> void:
 
 
 func _create_settlement() -> void:
-	_vendor_building(
-		"临河客栈", "building_tavern_red", Vector3(-8.5, 0.0, -5.7),
-		3.45, 15.0, Vector2(4.9, 4.0)
-	)
-	_vendor_building(
-		"渡口民居", "building_home_A_red", Vector3(-3.1, 0.0, -6.1),
-		3.35, -8.0, Vector2(4.5, 3.8)
-	)
+	_create_ming_guildhall(Vector3(-8.5, 0.0, -5.45))
+	_create_ming_residence(Vector3(-3.1, 0.0, -6.0))
 	_vendor_building(
 		"鲁氏铁铺", "building_blacksmith_red", Vector3(3.2, 0.0, -5.8),
 		3.55, 8.0, Vector2(5.1, 4.2)
@@ -326,9 +322,20 @@ func _create_settlement() -> void:
 		3.5, 165.0, Vector2(4.7, 4.0)
 	)
 
-	_box("牌坊横梁", Vector3(-0.6, 3.0, -3.8), Vector3(4.2, 0.35, 0.4), Color("#4c3025"))
-	_box("牌坊左柱", Vector3(-2.25, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
-	_box("牌坊右柱", Vector3(1.05, 1.45, -3.8), Vector3(0.35, 3.1, 0.35), Color("#56362a"))
+	_vendor_asset(
+		"云津渡木牌坊",
+		"%sArchBanner.glb" % POLYGONAL_LUNAR,
+		Vector3(-0.6, 0.0, -3.8),
+		0.72,
+		0.0
+	)
+	_vendor_asset(
+		"云津巡夜灯阁",
+		"%sShrine_Art.glb" % POLYGONAL_TEMPLE,
+		Vector3(-5.55, 0.0, 1.15),
+		0.78,
+		8.0
+	)
 
 	var market_props := [
 		["crate_long_A", Vector3(-6.8, 0.0, 1.8), 1.45, 10.0],
@@ -353,6 +360,160 @@ func _create_settlement() -> void:
 		_create_lantern("灯笼%d" % index, lantern_positions[index])
 	_create_rest_station(Vector3(0.7, 0.0, 4.2))
 	_create_riverside_pavilion(Vector3(0.7, 0.0, 4.2))
+
+
+func _create_ming_residence(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "渡口民居"
+	root.position = at
+	world_root.add_child(root)
+	var parts := [
+		[
+			"民居前墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, 1.76), 0.45, 0.0
+		],
+		[
+			"民居后墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, -1.76), 0.45, 180.0
+		],
+		[
+			"民居左墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(-1.76, 0, 0), 0.45, 90.0
+		],
+		[
+			"民居右墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(1.76, 0, 0), 0.45, -90.0
+		],
+		[
+			"青瓦直坡顶", "%sTempleRoof01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 3.46, 0), 0.45, 0.0
+		],
+		[
+			"民居石阶", "%sEntranceStairs.glb" % POLYGONAL_LUNAR,
+			Vector3(0, 0.01, 2.77), 0.45, 0.0
+		],
+		[
+			"民居门楼", "%sArchBanner.glb" % POLYGONAL_LUNAR,
+			Vector3(0, 0.01, 3.67), 0.46, 0.0
+		],
+	]
+	for x_offset in [-1.48, 1.48]:
+		for z_offset in [-1.48, 1.48]:
+			parts.append([
+				"民居朱柱", "%sTempleColumn_Art.glb" % POLYGONAL_TEMPLE,
+				Vector3(x_offset, 0, z_offset), 0.45, 0.0
+			])
+	for part in parts:
+		_vendor_asset(
+			str(part[0]),
+			str(part[1]),
+			part[2] as Vector3,
+			float(part[3]),
+			float(part[4]),
+			root
+		)
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(root, meshes)
+	occluder_groups.append({
+		"center": at,
+		"size": Vector2(4.35, 4.35),
+		"meshes": meshes,
+	})
+
+
+func _create_ming_guildhall(at: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "临河客栈"
+	root.position = at
+	world_root.add_child(root)
+	var parts := [
+		[
+			"客栈前墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, 2.12), 0.55, 0.0
+		],
+		[
+			"客栈后墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 0, -2.12), 0.55, 180.0
+		],
+		[
+			"客栈左墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(-2.12, 0, 0), 0.55, 90.0
+		],
+		[
+			"客栈右墙", "%sTempleWall01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(2.12, 0, 0), 0.55, -90.0
+		],
+		[
+			"青瓦歇山角顶", "%sTempleRoof01Corner_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 4.48, 0), 0.55, 0.0
+		],
+		[
+			"前檐额枋", "%sTempleBeam01_Art.glb" % POLYGONAL_TEMPLE,
+			Vector3(0, 3.58, 2.18), 0.55, 0.0
+		],
+		[
+			"入馆石阶", "%sEntranceStairs.glb" % POLYGONAL_LUNAR,
+			Vector3(0, 0.02, 3.62), 0.62, 0.0
+		],
+		[
+			"客栈门楼", "%sArchBanner.glb" % POLYGONAL_LUNAR,
+			Vector3(0, 0.02, 5.05), 0.64, 0.0
+		],
+		[
+			"门前灯左", "%sLamp01.glb" % POLYGONAL_LUNAR,
+			Vector3(-1.52, 0.15, 2.62), 0.72, 0.0
+		],
+		[
+			"门前灯右", "%sLamp01.glb" % POLYGONAL_LUNAR,
+			Vector3(1.52, 0.15, 2.62), 0.72, 0.0
+		],
+	]
+	for x_offset in [-1.82, 1.82]:
+		for z_offset in [-1.82, 1.82]:
+			parts.append([
+				"朱柱", "%sTempleColumn_Art.glb" % POLYGONAL_TEMPLE,
+				Vector3(x_offset, 0, z_offset), 0.55, 0.0
+			])
+	for part in parts:
+		_vendor_asset(
+			str(part[0]),
+			str(part[1]),
+			part[2] as Vector3,
+			float(part[3]),
+			float(part[4]),
+			root
+		)
+	var sign := Label3D.new()
+	sign.name = "临河客栈匾额"
+	sign.position = Vector3(0, 2.82, 2.18)
+	sign.text = "临河客栈"
+	sign.font_size = 56
+	sign.outline_size = 8
+	sign.pixel_size = 0.007
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.no_depth_test = true
+	sign.modulate = Color("#e6c77d")
+	root.add_child(sign)
+	for lamp_position in [
+		Vector3(-1.52, 1.32, 2.62),
+		Vector3(1.52, 1.32, 2.62),
+	]:
+		var light := OmniLight3D.new()
+		light.name = "客栈暖灯"
+		light.position = lamp_position
+		light.light_color = Color("#ff9a47")
+		light.omni_range = 4.2
+		light.light_energy = 0.0
+		light.shadow_enabled = false
+		root.add_child(light)
+		lantern_lights.append(light)
+	var meshes: Array[MeshInstance3D] = []
+	_collect_meshes(root, meshes)
+	occluder_groups.append({
+		"center": at,
+		"size": Vector2(5.35, 5.35),
+		"meshes": meshes,
+	})
 
 
 func _create_rest_station(at: Vector3) -> void:
@@ -614,7 +775,8 @@ func _vendor_asset(
 	resource_path: String,
 	at: Vector3,
 	uniform_scale: float,
-	yaw_degrees: float
+	yaw_degrees: float,
+	parent: Node3D = null
 ) -> Node3D:
 	var scene := load(resource_path) as PackedScene
 	if scene == null:
@@ -627,7 +789,10 @@ func _vendor_asset(
 	instance.position = at
 	instance.rotation_degrees.y = yaw_degrees
 	instance.scale = Vector3.ONE * uniform_scale
-	world_root.add_child(instance)
+	if is_instance_valid(parent):
+		parent.add_child(instance)
+	else:
+		world_root.add_child(instance)
 	return instance
 
 

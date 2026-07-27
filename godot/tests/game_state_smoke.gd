@@ -143,9 +143,31 @@ func _ready() -> void:
 	_expect(smith_actor.status_marker.text == "锻", "铁匠头顶应显示常驻功能标识")
 	var cloud_world = main_scene.get("world")
 	_expect(is_instance_valid(cloud_world.rest_marker), "云津渡应包含可点击的茶棚休整设施")
+	var imported_inn: Node = cloud_world.world_root.get_node_or_null("临河客栈")
+	_expect(is_instance_valid(imported_inn), "云津渡应生成临河客栈")
 	_expect(
-		is_instance_valid(cloud_world.world_root.get_node_or_null("临河客栈")),
-		"云津渡应载入 KayKit 完整客栈模型而不是程序化方块占位"
+		is_instance_valid(imported_inn)
+		and is_instance_valid(imported_inn.get_node_or_null("青瓦歇山角顶")),
+		"临河客栈应由 Polygonal Mind CC0 东亚建筑模型构成"
+	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("云津渡木牌坊")),
+		"云津渡入口应载入真实 CC0 木牌坊模型"
+	)
+	var imported_residence: Node = cloud_world.world_root.get_node_or_null("渡口民居")
+	_expect(
+		is_instance_valid(imported_residence)
+		and is_instance_valid(imported_residence.get_node_or_null("青瓦直坡顶")),
+		"渡口民居应由真实 CC0 东亚建筑模型构成"
+	)
+	_expect(
+		is_instance_valid(cloud_world.world_root.get_node_or_null("云津巡夜灯阁")),
+		"云津渡街市应载入真实 CC0 东亚灯阁模型"
+	)
+	_expect(
+		is_instance_valid(imported_inn)
+		and is_instance_valid(imported_inn.get_node_or_null("临河客栈匾额")),
+		"客栈应有可辨识的明式中文匾额"
 	)
 	_expect(
 		is_instance_valid(cloud_world.world_root.get_node_or_null("临水茶亭")),

@@ -83,6 +83,25 @@ from `broken_seals` is included.
 
 License text: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
 
+## Polygonal Mind CC0 GLB collection
+
+- Original creator: Polygonal Mind
+- Conversion/source repository:
+  <https://github.com/ToxSam/cc0-models-Polygonal-Mind>
+- Pinned source commit: `56db2d4088512531a070d0bf3eb9d284d077528d`
+- License: Creative Commons Zero 1.0 Universal
+- Used collections: `projects/tomb-chaser-2` and `projects/lunar-year`
+- Used assets: selected temple wall, column, beam, roof-corner, staircase,
+  gateway and lantern GLB models.
+- Actual use: the models are composed in Godot into the Cloud Ford inn,
+  traditional gateway and street details. The map layout, building composition,
+  names, collision/navigation, occlusion and gameplay integration are original
+  to this project.
+
+No upstream map, neon advertisements, gameplay, code, characters, names or
+story content is included. The exact imported files and license link are
+recorded in `godot/assets/vendor/polygonal_mind/SOURCE.md`.
+
 ## remarkablegames/phaser-rpg
 
 - Source: <https://github.com/remarkablegames/phaser-rpg>

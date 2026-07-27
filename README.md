@@ -5,11 +5,13 @@
 真实 3D 场景、角色、导航、灯光和特效运行。当前已经具备实时 3D 云津渡、纯鼠标寻路、敌人 AI、
 武学战斗、有关节武侠角色动画、昼夜与细雨环境、NPC 任务、掉落拾取、
 背包装备、铁匠淬炼、两路线序章、连续敌人波次、等级与声望成长、存档和网游式 HUD。
-云津渡新增红柱、石台、明式歇山顶构成的临水茶亭，用来逐步替换通用欧洲村镇轮廓。
+云津渡新增红柱、石台、明式歇山顶构成的临水茶亭，并从 Polygonal Mind
+CC0 GLB 仓库移植了真实东亚建筑模块。临河客栈现由青瓦屋顶、红墙、朱柱、
+额枋、石阶、灯笼和木牌坊组成，不再使用通用欧洲酒馆模型。
 
 ## Windows 游玩
 
-从 GitHub Releases 下载 `LuodongLegendary-0.6.0-win-x64-setup.exe`。安装向导采用 LZMA2 压缩，玩家可以修改安装目录，也可以选择是否创建桌面快捷方式。游戏仍然不需要联网。
+从 GitHub Releases 下载 `LuodongLegendary-0.7.0-win-x64-setup.exe`。安装向导采用 LZMA2 压缩，玩家可以修改安装目录，也可以选择是否创建桌面快捷方式。游戏仍然不需要联网。
 
 游戏采用纯鼠标操作：点击地面移动，点击敌人后自动接近并攻击，点击 NPC
 交谈，点击掉落物自动前往拾取，底部武学和右下角功能入口均可直接点击。
@@ -24,6 +26,8 @@
 离线存档。背包与角色面板会同步显示装备的 `+N` 等级。
 
 ![云津渡 2.5D 实机画面](docs/screenshots/cloud-ford-kaykit-preview.jpeg)
+
+![云津渡东亚建筑移植实机画面](docs/screenshots/cloud-ford-polygonal-preview.jpeg)
 
 完成云津渡序章后可进入独立的“寂音禅院”副本地图。副本包含巡逻守卫、
 可造成伤害的踏板暗弩、可点击的机关总闸、商客营救、院主首领战，以及
@@ -61,6 +65,8 @@ Windows 安装包通过 `installer/luodong-legendary.iss` 使用 Inno Setup 6 �
 当前 Godot 客户端的 3D 云津渡场景、角色、鼠标操作和战斗逻辑均为原创。
 网游式 HUD 的组件职责借鉴了 MIT 项目 `Relintai/broken_seals`，但没有复制
 其素材、世界观或界面皮肤。
+东亚客栈、牌坊与灯阁使用 Polygonal Mind CC0 GLB 模型进行原创组合，固定
+来源、提交和文件清单见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 旧 Phaser 原型曾迁移 `remarkablegames/phaser-rpg` 的 MIT 示例素材，固定来源和许可见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
@@ -74,3 +80,4 @@ Windows 安装包通过 `installer/luodong-legendary.iss` 使用 Inno Setup 6 �
 - [技术架构](docs/ARCHITECTURE.md)
 - [开发说明](docs/DEVELOPMENT.md)
 - [等距 3D 技术移植记录](docs/ISOMETRIC_3D_PORT.md)
+- [东亚建筑资产移植记录](docs/EAST_ASIAN_ASSET_PORT.md)

@@ -82,7 +82,7 @@ godot --headless --path godot --export-release "Windows Desktop" \
 在 Windows 上使用 Inno Setup 6 生成安装包：
 
 ```bash
-iscc /DMyAppVersion=0.6.0 installer/luodong-legendary.iss
+iscc /DMyAppVersion=0.7.0 installer/luodong-legendary.iss
 ```
 
 安装包允许玩家选择安装位置，并使用 LZMA2 固实压缩。网络功能仍不在
